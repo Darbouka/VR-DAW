@@ -1,107 +1,129 @@
 #include "PluginManager.hpp"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_plugin_client/juce_audio_plugin_client.h>
+#include <vst3/vst3.h>
+#include <aax/aax.h>
 
 namespace VR_DAW {
 
-PluginManager::PluginManager() {
-    // Initialisiere Plugin-Format-Manager
-    formatManager.addDefaultFormats();
-    
-    // Registriere VST3-Format
-    formatManager.addFormat(new juce::VST3PluginFormat());
-    
-    // Initialisiere Plugin-Scanner
-    pluginScanner = std::make_unique<juce::KnownPluginList>();
-    pluginScanner->setCustomScanner(std::make_unique<VST3Scanner>());
-}
-
-void PluginManager::scanForPlugins() {
-    // Scanne Standard-VST3-Verzeichnisse
-    juce::FileSearchPath searchPath;
-    
-    // Windows
-    searchPath.add(juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory)
-        .getChildFile("VST3"));
-    
-    // macOS
-    searchPath.add(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("Audio/Plug-Ins/VST3"));
-    
-    // Linux
-    searchPath.add(juce::File("~/.vst3"));
-    
-    // Scanne Plugins
-    pluginScanner->scanAndAddDirectory(searchPath, true, true);
-    
-    // Speichere Plugin-Liste
-    savePluginList();
-}
-
-void PluginManager::loadPlugin(const juce::String& identifier) {
-    // Lade Plugin
-    auto* format = formatManager.getFormat(0);
-    if (format) {
-        auto* plugin = format->createInstance(identifier, sampleRate, maxBlockSize);
-        if (plugin) {
-            plugins.push_back(std::unique_ptr<juce::AudioPluginInstance>(plugin));
-            
-            // Initialisiere Plugin
-            plugin->prepareToPlay(sampleRate, maxBlockSize);
-            plugin->setPlayConfigDetails(numChannels, numChannels, sampleRate, maxBlockSize);
-        }
-    }
-}
-
-void PluginManager::unloadPlugin(const juce::String& identifier) {
-    // Finde und entferne Plugin
-    auto it = std::find_if(plugins.begin(), plugins.end(),
-        [&identifier](const auto& plugin) {
-            return plugin->getPluginDescription().identifier == identifier;
-        });
-    
-    if (it != plugins.end()) {
-        (*it)->releaseResources();
-        plugins.erase(it);
-    }
-}
-
-void PluginManager::savePluginList() {
-    // Speichere Plugin-Liste in XML
-    juce::XmlElement* xml = pluginScanner->createXml();
-    if (xml) {
-        xml->writeToFile(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-            .getChildFile("VR-DAW/plugins.xml"), "");
-        delete xml;
-    }
-}
-
-void PluginManager::loadPluginList() {
-    // Lade Plugin-Liste aus XML
-    auto file = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("VR-DAW/plugins.xml");
-    
-    if (file.existsAsFile()) {
-        if (auto* xml = juce::XmlDocument::parse(file)) {
-            pluginScanner->recreateFromXml(*xml);
-            delete xml;
-        }
-    }
-}
-
-class VST3Scanner : public juce::PluginDirectoryScanner {
-public:
-    VST3Scanner() : juce::PluginDirectoryScanner(pluginList, format, searchPath, true, true) {}
-    
-    void scanDirectory(const juce::File& directory) {
-        searchPath.add(directory);
-        scanNextFile(true);
-    }
-    
+class PluginManager {
 private:
-    juce::KnownPluginList pluginList;
-    juce::VST3PluginFormat format;
-    juce::FileSearchPath searchPath;
+    std::vector<std::unique_ptr<juce::AudioPluginInstance>> vstPlugins;
+    std::vector<std::unique_ptr<AAX_IEffect>> aaxPlugins;
+    std::vector<std::unique_ptr<juce::AudioPluginInstance>> auPlugins;
+    
+    // Plugin-Scanning und -Validierung
+    void scanPluginDirectories() {
+        // VST3 Verzeichnisse
+        auto vst3Paths = {
+            "/Library/Audio/Plug-Ins/VST3",
+            "C:/Program Files/Common Files/VST3",
+            "C:/Program Files (x86)/Common Files/VST3"
+        };
+        
+        // AU Verzeichnisse
+        auto auPaths = {
+            "/Library/Audio/Plug-Ins/Components"
+        };
+        
+        // AAX Verzeichnisse
+        auto aaxPaths = {
+            "/Library/Application Support/Avid/Audio/Plug-Ins"
+        };
+        
+        // Scan und lade Plugins
+        for (const auto& path : vst3Paths) {
+            scanDirectory(path, PluginType::VST3);
+        }
+        
+        for (const auto& path : auPaths) {
+            scanDirectory(path, PluginType::AU);
+        }
+        
+        for (const auto& path : aaxPaths) {
+            scanDirectory(path, PluginType::AAX);
+        }
+    }
+    
+    // Performance-Optimierung
+    void optimizePluginPerformance() {
+        // GPU-Beschleunigung für Audio-Verarbeitung
+        enableGPUAcceleration();
+        
+        // Plugin-Threading optimieren
+        optimizeThreading();
+        
+        // Buffer-Größen anpassen
+        optimizeBufferSizes();
+    }
+    
+    // Latenz-Optimierung
+    void optimizeLatency() {
+        // ASIO-Treiber Integration
+        setupASIO();
+        
+        // Direct Monitoring
+        enableDirectMonitoring();
+        
+        // Buffer-Latenz minimieren
+        minimizeBufferLatency();
+    }
+
+public:
+    // Plugin-Verwaltung
+    void loadPlugin(const std::string& path, PluginType type) {
+        // Plugin laden und validieren
+        auto plugin = createPluginInstance(path, type);
+        if (plugin) {
+            // Performance optimieren
+            optimizePluginPerformance();
+            
+            // Plugin zur entsprechenden Liste hinzufügen
+            switch (type) {
+                case PluginType::VST3:
+                    vstPlugins.push_back(std::move(plugin));
+                    break;
+                case PluginType::AAX:
+                    aaxPlugins.push_back(std::move(plugin));
+                    break;
+                case PluginType::AU:
+                    auPlugins.push_back(std::move(plugin));
+                    break;
+            }
+        }
+    }
+    
+    // Plugin-Performance-Monitoring
+    void monitorPluginPerformance() {
+        // CPU-Auslastung überwachen
+        monitorCPUUsage();
+        
+        // GPU-Auslastung überwachen
+        monitorGPUUsage();
+        
+        // Latenz überwachen
+        monitorLatency();
+    }
+    
+    // Plugin-Kompatibilität
+    bool checkPluginCompatibility(const std::string& path, PluginType type) {
+        // Plugin-Format prüfen
+        if (!isValidPluginFormat(path, type)) {
+            return false;
+        }
+        
+        // Systemanforderungen prüfen
+        if (!meetsSystemRequirements(path)) {
+            return false;
+        }
+        
+        // Abhängigkeiten prüfen
+        if (!checkDependencies(path)) {
+            return false;
+        }
+        
+        return true;
+    }
 };
 
 } // namespace VR_DAW 
