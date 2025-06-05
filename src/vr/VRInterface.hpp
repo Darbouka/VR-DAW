@@ -6,9 +6,7 @@
 #include <map>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <openvr.h>
-#include <GL/glew.h>
-#include <juce_audio_processors/juce_audio_processors.h>
+#include "VRController.hpp"
 
 namespace VR_DAW {
 
@@ -20,6 +18,9 @@ public:
     // Initialisierung und Shutdown
     bool initialize();
     void shutdown();
+    void update();
+    void render();
+    bool isConnected() const;
     
     // Raum-Management
     struct Room {
@@ -67,7 +68,7 @@ public:
     struct Mesh {
         std::vector<Vertex> vertices;
         std::vector<unsigned int> indices;
-        GLuint vao;
+        unsigned int vao;
     };
     
     // Audio-Parameter
@@ -82,7 +83,7 @@ public:
     
     // Neue VR-Optimierungen
     struct VROptimizations {
-        bool hapticFeedback = false;  // Standardmäßig deaktiviert
+        bool hapticFeedback = false;
         bool handTracking = true;
         bool spatialAudio = true;
         bool adaptiveRendering = true;
@@ -90,9 +91,9 @@ public:
         int msaaSamples = 4;
         bool asyncReprojection = true;
         bool motionSmoothing = true;
-        bool foveatedRendering = false;  // Standardmäßig deaktiviert
-        bool eyeTracking = false;  // Standardmäßig deaktiviert
-        bool brainControl = false;  // Standardmäßig deaktiviert
+        bool foveatedRendering = false;
+        bool eyeTracking = false;
+        bool brainControl = false;
     };
     
     // Raum-Funktionen
@@ -105,16 +106,14 @@ public:
     // Bewegungs-Tracking
     void startMotionTracking();
     void updateMotionData();
-    void mapMotionToAudioParameters(juce::AudioProcessor& processor);
     
     // Interaktion
-    void handleControllerInput(const vr::VRControllerState_t& state);
+    void handleControllerInput(const std::vector<float>& state);
     void handleHandGestures(const std::vector<glm::vec3>& handPositions);
     void handleBodyMovement(const MotionData& motionData);
     
     // Audio-Integration
     void updateSpatialAudio(const glm::vec3& listenerPosition, const glm::quat& listenerRotation);
-    void mapMotionToEffects(juce::AudioProcessor& processor);
     
     // Rendering
     void renderRoom();
@@ -135,115 +134,133 @@ public:
     void enableMotionSmoothing(bool enable);
     void enableFoveatedRendering(bool enable);
 
-    // Erweiterte Rendering-Funktionen
-    void initializeRendering();
-    void shutdownRendering();
-    void updateRendering();
-    void setFoveatedRendering(bool enable);
-    void setRenderScale(float scale);
-    void setMSAASamples(int samples);
-    void enableAsyncReprojection(bool enable);
-    void enableMotionSmoothing(bool enable);
+    // VR-System-Status
+    bool isInitialized() const;
+    bool isRunning() const;
+    void setRunning(bool running);
 
-private:
-    // VR-System
-    vr::IVRSystem* vrSystem;
-    vr::IVRCompositor* vrCompositor;
-    vr::IVRInput* vrInput;
-    
-    // Raum und Fenster
-    Room currentRoom;
-    std::vector<Window> windows;
-    std::map<std::string, int> windowToWallMap;
-    
-    // Bewegungs-Tracking
-    MotionData currentMotion;
-    bool isTrackingActive;
-    std::vector<vr::TrackedDevicePose_t> devicePoses;
-    
+    // Controller-Management
+    std::shared_ptr<VRController> getLeftController();
+    std::shared_ptr<VRController> getRightController();
+    void updateControllers();
+
+    // VR-Rendering
+    void beginFrame();
+    void endFrame();
+    void submitFrame();
+
+    // VR-Interaktion
+    bool handleInput();
+    void processEvents();
+    void updateTracking();
+
+    // VR-Konfiguration
+    void setRenderResolution(int width, int height);
+    void setRefreshRate(float rate);
+    void setIPD(float ipd);
+    void setWorldScale(float scale);
+
+    // VR-Statistiken
+    float getFrameTime() const;
+    float getFrameRate() const;
+    float getLatency() const;
+    int getDroppedFrames() const;
+
+    // Interface-Status
+    bool isVisible() const;
+    std::string getStatus() const;
+
+    // Interface-Elemente
+    struct InterfaceElement {
+        std::string id;
+        std::string type;
+        glm::vec3 position;
+        glm::quat rotation;
+        glm::vec2 size;
+        bool visible;
+        bool interactive;
+        std::string text;
+        std::string texture;
+        glm::vec4 color;
+    };
+
+    // Interface-Management
+    void createElement(const std::string& id, const std::string& type);
+    void destroyElement(const std::string& id);
+    void updateElement(const std::string& id, const InterfaceElement& element);
+    InterfaceElement getElement(const std::string& id) const;
+
+    // Layout-Management
+    void setLayout(const std::string& layoutType);
+    void updateLayout();
+    void setElementPosition(const std::string& id, const glm::vec3& position);
+    void setElementRotation(const std::string& id, const glm::quat& rotation);
+    void setElementSize(const std::string& id, const glm::vec2& size);
+
+    // Interaktion
+    void handleInteraction(const glm::vec3& position, const glm::quat& rotation);
+    bool isElementHovered(const std::string& id) const;
+    bool isElementClicked(const std::string& id) const;
+    void registerInteractionCallback(const std::string& id, std::function<void()> callback);
+
+    // Styling
+    void setElementColor(const std::string& id, const glm::vec4& color);
+    void setElementTexture(const std::string& id, const std::string& texture);
+    void setElementText(const std::string& id, const std::string& text);
+    void setElementFont(const std::string& id, const std::string& font);
+    void setElementFontSize(const std::string& id, float size);
+
+    // Animation
+    void animateElement(const std::string& id, const glm::vec3& targetPosition, float duration);
+    void animateElementRotation(const std::string& id, const glm::quat& targetRotation, float duration);
+    void animateElementColor(const std::string& id, const glm::vec4& targetColor, float duration);
+    void stopAnimation(const std::string& id);
+
     // Rendering
-    struct RenderState {
-        glm::mat4 viewMatrix;
-        glm::mat4 projectionMatrix;
-    } renderState;
-    
-    GLuint shaderProgram;
-    GLuint textureShaderProgram;
-    GLuint motionShaderProgram;
-    
-    // Shader-Uniforms
-    GLint modelLoc;
-    GLint viewLoc;
-    GLint projectionLoc;
-    GLint diffuseColorLoc;
-    GLint specularColorLoc;
-    GLint shininessLoc;
-    GLint transparencyLoc;
-    
-    GLint textureModelLoc;
-    GLint textureViewLoc;
-    GLint textureProjectionLoc;
-    GLint textureLoc;
-    
-    // Hilfsfunktionen
-    void initializeVR();
-    void initializeControllers();
-    void initializeShaders();
-    GLuint compileShaderProgram(const char* vertexSource, const char* fragmentSource);
-    Mesh loadControllerModel(vr::ETrackedControllerRole role);
-    void updateControllerStates();
-    void processControllerInput();
-    void updateWindowTransforms();
-    void calculateSpatialAudio();
-
-    VROptimizations currentVROptimizations;
-    std::unique_ptr<class HapticController> hapticController;
-    std::unique_ptr<class HandTracker> handTracker;
-    std::unique_ptr<class SpatialAudioRenderer> spatialAudioRenderer;
-    std::unique_ptr<class AdaptiveRenderer> adaptiveRenderer;
-    bool foveatedRenderingEnabled = false;
-    float renderScale = 1.0f;
-    int msaaSamples = 4;
-    bool asyncReprojectionEnabled = false;
-    bool motionSmoothingEnabled = false;
-};
-
-class AdaptiveRenderer {
-public:
-    AdaptiveRenderer();
-    ~AdaptiveRenderer();
-
-    void initialize();
-    void shutdown();
-    void render();
-    void enableFoveatedRendering(bool enable);
-    void setFoveatedRadius(float radius);
-    void setRenderScale(float scale);
-    void setMSAASamples(int samples);
-    void enableAsyncReprojection(bool enable);
-    void enableMotionSmoothing(bool enable);
+    void renderInterface();
+    void setRenderQuality(int quality);
+    void enableDebugRendering(bool enable);
 
 private:
-    struct RenderTarget {
-        GLuint framebuffer;
-        GLuint colorTexture;
-        GLuint depthTexture;
-        glm::vec2 resolution;
-    };
+    struct Impl;
+    std::unique_ptr<Impl> pImpl;
 
-    struct FoveatedRendering {
-        float radius;
-        float falloff;
-        int qualityLevels;
-        std::vector<RenderTarget> qualityTargets;
-    };
-
-    FoveatedRendering foveatedRendering;
-    float renderScale = 1.0f;
-    int msaaSamples = 4;
-    bool asyncReprojectionEnabled = false;
-    bool motionSmoothingEnabled = false;
-    bool isInitialized = false;
+    bool initialized;
+    bool running;
+    bool debugEnabled;
+    std::shared_ptr<VRController> leftController;
+    std::shared_ptr<VRController> rightController;
+    
+    // Rendering-Parameter
+    int renderWidth;
+    int renderHeight;
+    float refreshRate;
+    float ipd;
+    float worldScale;
+    
+    // Performance-Metriken
+    float frameTime;
+    float frameRate;
+    float latency;
+    int droppedFrames;
+    
+    // Interface-Status
+    std::string currentLayout;
+    float renderScale;
+    int renderQuality;
+    
+    // Interface-Elemente
+    std::map<std::string, InterfaceElement> elements;
+    std::map<std::string, std::vector<std::function<void()>>> interactionCallbacks;
+    
+    void initializeVRSystem();
+    void shutdownVRSystem();
+    void updatePerformanceMetrics();
+    void updateElementTransforms();
+    void processInteractions();
+    void updateAnimations();
+    void renderElement(const InterfaceElement& element);
+    void renderDebugInfo();
 };
 
 } // namespace VR_DAW 

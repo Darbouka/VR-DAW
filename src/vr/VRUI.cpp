@@ -417,19 +417,21 @@ void VRUI::focusElement(const std::string& elementId) {
 void VRUI::renderElement(const UIElement& element) {
     glm::mat4 modelMatrix = calculateModelMatrix(element);
     
-    // TODO: Rendering-Code für verschiedene Element-Typen
     switch (element.type) {
         case UIElement::Type::Button:
-            // Button rendern
+            renderButton(element, modelMatrix);
             break;
         case UIElement::Type::Slider:
-            // Slider rendern
+            renderSlider(element, modelMatrix);
             break;
         case UIElement::Type::Knob:
-            // Knob rendern
+            renderKnob(element, modelMatrix);
             break;
         case UIElement::Type::Waveform:
-            // Waveform rendern
+            renderWaveform(element, modelMatrix);
+            break;
+        case UIElement::Type::Text:
+            renderText(TextElement{element.text, element.position, element.scale});
             break;
         default:
             break;
@@ -481,12 +483,41 @@ bool VRUI::isPointInElement(const glm::vec3& point, const UIElement& element) {
 }
 
 void VRUI::updateAnimations() {
-    // TODO: Animation-Update-Logik implementieren
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float deltaTime = std::chrono::duration<float>(currentTime - lastUpdateTime).count();
+    lastUpdateTime = currentTime;
+
+    for (auto& [element, animations] : pImpl->animations) {
+        for (auto& animation : animations) {
+            animation.elapsed += deltaTime;
+            float t = std::min(animation.elapsed / animation.duration, 1.0f);
+            
+            if (animation.easingFunction) {
+                t = animation.easingFunction(t);
+            }
+            
+            updateElementAnimation(*element, animation, t);
+        }
+
+        // Abgeschlossene Animationen entfernen
+        animations.erase(
+            std::remove_if(animations.begin(), animations.end(),
+                [](const Animation& a) { return a.elapsed >= a.duration; }),
+            animations.end()
+        );
+    }
 }
 
 void VRUI::animateElement(UIElement& element, const glm::vec3& targetPosition, float duration) {
-    // TODO: Animation-Logik implementieren
-    element.position = targetPosition;
+    Animation animation;
+    animation.type = Animation::Type::Position;
+    animation.startValue = element.position;
+    animation.endValue = targetPosition;
+    animation.duration = duration;
+    animation.elapsed = 0.0f;
+    animation.easingFunction = pImpl->easingFunctions["easeInOutQuad"];
+    
+    pImpl->animations[&element].push_back(animation);
 }
 
 glm::mat4 VRUI::calculateModelMatrix(const UIElement& element) const {
@@ -504,8 +535,13 @@ void VRUI::updateElementTransform(UIElement& element) {
 }
 
 void VRUI::initializeFontSystem() {
-    // TODO: Font-System initialisieren (z.B. mit FreeType)
-    loadFont("default");
+    auto& textRenderer = TextRenderer::getInstance();
+    textRenderer.initialize();
+    
+    // Standard-Schriftarten laden
+    textRenderer.loadFont("default", "fonts/Roboto-Regular.ttf");
+    textRenderer.loadFont("bold", "fonts/Roboto-Bold.ttf");
+    textRenderer.loadFont("mono", "fonts/RobotoMono-Regular.ttf");
 }
 
 void VRUI::loadFont(const std::string& fontName) {
@@ -590,34 +626,6 @@ void VRUI::removeAnimation(UIElement& element, Animation::Type type) {
     );
 }
 
-void VRUI::updateAnimations(float deltaTime) {
-    for (auto& [element, animations] : pImpl->animations) {
-        for (auto& animation : animations) {
-            animation.elapsed += deltaTime;
-            float t = std::min(animation.elapsed / animation.duration, 1.0f);
-            updateElementAnimation(*element, animation, t);
-        }
-
-        // Abgeschlossene Animationen entfernen
-        animations.erase(
-            std::remove_if(animations.begin(), animations.end(),
-                [](const Animation& a) { return a.elapsed >= a.duration; }),
-            animations.end()
-        );
-    }
-}
-
-void VRUI::setEasingFunction(Animation& animation, const std::string& functionName) {
-    auto it = pImpl->easingFunctions.find(functionName);
-    if (it != pImpl->easingFunctions.end()) {
-        animation.easingFunction = it->second;
-    }
-}
-
-float VRUI::applyEasing(float t, const std::function<float(float)>& easing) {
-    return easing ? easing(t) : t;
-}
-
 void VRUI::updateElementAnimation(UIElement& element, const Animation& animation, float t) {
     float easedT = applyEasing(t, animation.easingFunction);
     glm::vec3 currentValue = interpolate(animation.startValue, animation.endValue, easedT);
@@ -700,8 +708,27 @@ void VRUI::renderDebugInfo() {
 }
 
 void VRUI::renderElementBounds(const UIElement& element) {
-    // TODO: Element-Grenzen visualisieren
-    // Hier würde die Visualisierung der Element-Grenzen erfolgen
+    glm::vec3 min = element.position - element.scale * 0.5f;
+    glm::vec3 max = element.position + element.scale * 0.5f;
+    
+    std::vector<glm::vec3> lines = {
+        min, glm::vec3(max.x, min.y, min.z),
+        glm::vec3(max.x, min.y, min.z), max,
+        max, glm::vec3(min.x, max.y, min.z),
+        glm::vec3(min.x, max.y, min.z), min,
+        min, glm::vec3(min.x, min.y, max.z),
+        glm::vec3(min.x, min.y, max.z), glm::vec3(max.x, min.y, max.z),
+        glm::vec3(max.x, min.y, max.z), glm::vec3(max.x, max.y, max.z),
+        glm::vec3(max.x, max.y, max.z), glm::vec3(min.x, max.y, max.z),
+        glm::vec3(min.x, max.y, max.z), glm::vec3(min.x, min.y, max.z)
+    };
+    
+    glBegin(GL_LINES);
+    glColor3f(1.0f, 0.0f, 0.0f);
+    for (const auto& line : lines) {
+        glVertex3f(line.x, line.y, line.z);
+    }
+    glEnd();
 }
 
 void VRUI::setRenderScale(float scale) {
