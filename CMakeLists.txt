@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(VR_DAW VERSION 1.0)
+project(VR-DAW VERSION 0.1.0)
 
 # Compiler-Flags
 set(CMAKE_CXX_STANDARD 17)
@@ -19,7 +19,6 @@ if(USE_OPENGL)
     find_package(OpenGL REQUIRED)
     find_package(GLEW REQUIRED)
     find_package(GLFW3 REQUIRED)
-    find_package(glad REQUIRED)
 endif()
 
 # Vulkan finden
@@ -39,11 +38,10 @@ if(USE_OPENVR)
 endif()
 
 # PortAudio finden
-find_package(PortAudio REQUIRED)
+# find_package(PortAudio REQUIRED)
 
 # JACK optional finden
 if(USE_JACK)
-    find_package(JACK QUIET)
     add_definitions(-DUSE_JACK)
 endif()
 
@@ -58,17 +56,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# glad
-FetchContent_Declare(
-    glad
-    GIT_REPOSITORY https://github.com/Dav1dde/glad.git
-    GIT_TAG master
-)
-FetchContent_MakeAvailable(glad)
-
 # FreeType
 find_package(Freetype REQUIRED)
 include_directories(${FREETYPE_INCLUDE_DIRS})
+
+# SQLite3
+find_package(SQLite3 REQUIRED)
+
+# CURL
+find_package(CURL REQUIRED)
+
+# JSONCPP
+find_package(jsoncpp REQUIRED)
 
 # Include-Verzeichnisse
 include_directories(
@@ -76,35 +75,47 @@ include_directories(
     ${OPENGL_INCLUDE_DIR}
     ${GLM_INCLUDE_DIRS}
     ${FREETYPE_INCLUDE_DIRS}
+    ${SQLite3_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
+    ${JSONCPP_INCLUDE_DIRS}
 )
 
 if(USE_JACK)
-    if(JACK_FOUND)
-        include_directories(${JACK_INCLUDE_DIRS})
-        add_definitions(-DUSE_JACK)
-    else()
-        message(WARNING "JACK Audio not found. Audio features will be disabled.")
-    endif()
+    include_directories(${JACK_INCLUDE_DIR})
+    add_definitions(-DUSE_JACK)
 endif()
 
 # Quelldateien
 set(SOURCES
+    src/main.cpp
+    src/VRDAW.cpp
     src/vr/VRUI.cpp
     src/vr/TextRenderer.cpp
-    src/vr/TextureManager.cpp
+    src/audio/AudioEngine.cpp
+    src/midi/MIDIEngine.cpp
+    src/plugins/PluginManager.cpp
+    src/network/NetworkManager.cpp
+    src/ai/AIManager.cpp
+    src/community/CommunityManager.cpp
 )
 
 # Header-Dateien
 set(HEADERS
+    src/VRDAW.hpp
     src/vr/VRUI.hpp
     src/vr/TextRenderer.hpp
-    src/vr/TextureManager.hpp
+    src/audio/AudioEngine.hpp
+    src/midi/MIDIEngine.hpp
+    src/plugins/PluginManager.hpp
+    src/network/NetworkManager.hpp
+    src/ai/AIManager.hpp
+    src/community/CommunityManager.hpp
 )
 
 # Shader-Dateien
 set(SHADERS
-    src/vr/shaders/text_vertex.glsl
-    src/vr/shaders/text_fragment.glsl
+    src/vr/shaders/text.vert
+    src/vr/shaders/text.frag
 )
 
 # Executable erstellen
@@ -120,11 +131,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${GLAD_INCLUDE_DIRS}
     ${VULKAN_INCLUDE_DIRS}
     ${OPENVR_INCLUDE_DIRS}
-    ${PORTAUDIO_INCLUDE_DIRS}
-    ${JACK_INCLUDE_DIRS}
+    ${PORTAUDIO_INCLUDE_DIR}
+    ${JACK_INCLUDE_DIR}
     ${stb_SOURCE_DIR}
     ${glad_SOURCE_DIR}/include
     ${FREETYPE_INCLUDE_DIRS}
+    ${SQLite3_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
+    ${JSONCPP_INCLUDE_DIRS}
 )
 
 # Bibliotheken verlinken
@@ -135,13 +149,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${GLAD_LIBRARIES}
     ${VULKAN_LIBRARIES}
     ${OPENVR_LIBRARIES}
-    ${PORTAUDIO_LIBRARIES}
+    ${PORTAUDIO_LIBRARY}
     glad
     ${FREETYPE_LIBRARIES}
+    ${SQLite3_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${JSONCPP_LIBRARIES}
 )
 
-if(USE_JACK AND JACK_FOUND)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${JACK_LIBRARIES})
+if(USE_JACK)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${JACK_LIBRARY})
 endif()
 
 # Compiler-Flags
@@ -158,4 +175,29 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 # Shader-Dateien installieren
-install(FILES ${SHADERS} DESTINATION share/${PROJECT_NAME}/shaders) 
+install(FILES ${SHADERS} DESTINATION share/${PROJECT_NAME}/shaders)
+
+set(glad_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/glad")
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# find_package(glad REQUIRED)
+set(GLAD_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/glad/include")
+set(GLAD_SRC "${CMAKE_CURRENT_SOURCE_DIR}/external/glad/src/glad.c")
+
+target_sources(${PROJECT_NAME} PRIVATE ${GLAD_SRC})
+target_include_directories(${PROJECT_NAME} PRIVATE ${GLAD_INCLUDE_DIR})
+
+# Füge nach add_executable:
+set(PORTAUDIO_INCLUDE_DIR "/usr/local/include")
+set(PORTAUDIO_LIBRARY "/usr/local/lib/libportaudio.dylib")
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${PORTAUDIO_INCLUDE_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${PORTAUDIO_LIBRARY})
+
+# Füge nach add_executable:
+set(JACK_INCLUDE_DIR "/usr/local/include")
+set(JACK_LIBRARY "/usr/local/lib/libjack.dylib")
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${JACK_INCLUDE_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${JACK_LIBRARY}) 

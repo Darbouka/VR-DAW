@@ -1,32 +1,30 @@
-add_library(vr STATIC
+add_library(vr
+    VRInput.cpp
+    VRInput.hpp
+    VRPhysics.cpp
+    VRPhysics.hpp
+    VRRenderer.cpp
+    VRRenderer.hpp
+    VRAudio.cpp
+    VRAudio.hpp
+    VRScene.cpp
+    VRScene.hpp
     VRInterface.cpp
-    Controller.cpp
-    HandTracking.cpp
-    RoomTracking.cpp
-    Rendering.cpp
-    Interaction.cpp
-    SpatialAudio.cpp
-    Haptics.cpp
-    Gestures.cpp
-    Calibration.cpp
-    Safety.cpp
+    VRInterface.hpp
+    VRController.cpp
+    VRController.hpp
+    VRSystem.cpp
+    VRSystem.hpp
+    VRUI.cpp
+    VRUI.hpp
+    VRNetwork.cpp
+    VRNetwork.hpp
 )
 
-target_include_directories(vr
-    PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+target_include_directories(vr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(vr
-    PUBLIC
-    core
-    juce::juce_core
-    OpenXR::openxr_loader
-    PRIVATE
-    juce::juce_events
-    glm::glm
+    # Keine JUCE-Abhängigkeiten mehr
 )
 
 if(APPLE)

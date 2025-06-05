@@ -1,32 +1,16 @@
-add_library(utils STATIC
+add_library(utils
     Logger.cpp
-    Config.cpp
-    FileSystem.cpp
-    Threading.cpp
-    Memory.cpp
-    Time.cpp
-    Math.cpp
-    String.cpp
-    Network.cpp
-    Serialization.cpp
-    Compression.cpp
-    Cryptography.cpp
+    Logger.hpp
+    ConfigManager.cpp
+    ConfigManager.hpp
 )
 
-target_include_directories(utils
-    PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+target_include_directories(utils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(utils
-    PUBLIC
-    core
-    juce::juce_core
     PRIVATE
-    juce::juce_data_structures
-    glm::glm
+    ${BOOST_LIBRARIES}
+    nlohmann_json::nlohmann_json
 )
 
 if(APPLE)
