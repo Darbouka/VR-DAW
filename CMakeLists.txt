@@ -1,151 +1,161 @@
-cmake_minimum_required(VERSION 3.20)
-project(VR_DAW VERSION 1.0.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.15)
+project(VR_DAW VERSION 1.0)
 
-# C++-Standard setzen
-set(CMAKE_CXX_STANDARD 20)
+# Compiler-Flags
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# JUCE-Framework einbinden
-include(FetchContent)
-FetchContent_Declare(
-    JUCE
-    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 7.0.5
-)
-FetchContent_MakeAvailable(JUCE)
+# Optionen
+option(USE_JACK "Enable JACK Audio support" ON)
+option(USE_OPENGL "Use OpenGL for rendering" ON)
+option(USE_VULKAN "Use Vulkan for rendering" OFF)
+option(USE_OPENVR "Enable OpenVR support" ON)
 
-# OpenXR einbinden
-find_package(OpenXR REQUIRED)
-
-# GLM einbinden
+# GLM finden
 find_package(glm REQUIRED)
 
-# Dolby Atmos SDK einbinden
-if(WIN32)
-    set(DOLBY_ATMOS_SDK_DIR "$ENV{ProgramFiles}/Dolby/Atmos/SDK")
-elseif(APPLE)
-    set(DOLBY_ATMOS_SDK_DIR "/Library/Dolby/Atmos/SDK")
+# OpenGL finden
+if(USE_OPENGL)
+    find_package(OpenGL REQUIRED)
+    find_package(GLEW REQUIRED)
+    find_package(GLFW3 REQUIRED)
+    find_package(glad REQUIRED)
 endif()
 
-if(EXISTS "${DOLBY_ATMOS_SDK_DIR}")
-    add_subdirectory(${DOLBY_ATMOS_SDK_DIR} ${CMAKE_BINARY_DIR}/dolby_atmos)
+# Vulkan finden
+if(USE_VULKAN)
+    find_package(Vulkan REQUIRED)
 endif()
 
-# Unterverzeichnisse einbinden
-add_subdirectory(src/core)
-add_subdirectory(src/plugins)
-add_subdirectory(src/ui)
-add_subdirectory(src/vr)
-add_subdirectory(src/audio)
-add_subdirectory(src/video)
-add_subdirectory(src/utils)
-
-# Plattformspezifische Konfiguration
-if(APPLE)
-    # macOS-spezifische Einstellungen
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum OS X deployment version")
-    
-    # AudioUnit und CoreAudio für macOS
-    find_library(AUDIOUNIT AudioUnit REQUIRED)
-    find_library(COREAUDIO CoreAudio REQUIRED)
-    
-    # JUCE-Module für macOS
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_basics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_devices)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_processors)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_utils)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_core)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_data_structures)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_events)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_graphics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_gui_basics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_gui_extra)
-    
-elseif(WIN32)
-    # Windows-spezifische Einstellungen
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-    
-    # VST3 SDK für Windows
-    set(VST3_SDK_DIR "$ENV{ProgramFiles}/VST3 SDK" CACHE PATH "VST3 SDK directory")
-    if(EXISTS "${VST3_SDK_DIR}")
-        add_subdirectory(${VST3_SDK_DIR} ${CMAKE_BINARY_DIR}/vst3)
+# OpenVR finden
+if(USE_OPENVR)
+    # OpenVR SDK Pfad
+    set(OPENVR_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/openvr" CACHE PATH "Path to OpenVR SDK")
+    if(NOT EXISTS "${OPENVR_SDK_PATH}")
+        message(FATAL_ERROR "OpenVR SDK not found at ${OPENVR_SDK_PATH}. Please download it from https://github.com/ValveSoftware/openvr/releases")
     endif()
-    
-    # JUCE-Module für Windows
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_basics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_devices)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_processors)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_audio_utils)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_core)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_data_structures)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_events)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_graphics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_gui_basics)
-    juce_add_module(${JUCE_SOURCE_DIR}/modules/juce_gui_extra)
+    set(OPENVR_INCLUDE_DIRS "${OPENVR_SDK_PATH}/headers")
+    set(OPENVR_LIBRARIES "${OPENVR_SDK_PATH}/lib/macos64/libopenvr_api.dylib")
 endif()
 
-# Hauptziel definieren
-add_executable(VR_DAW
-    src/main.cpp
+# PortAudio finden
+find_package(PortAudio REQUIRED)
+
+# JACK optional finden
+if(USE_JACK)
+    find_package(JACK QUIET)
+    add_definitions(-DUSE_JACK)
+endif()
+
+# Externe Bibliotheken
+include(FetchContent)
+
+# stb_image
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(stb)
+
+# glad
+FetchContent_Declare(
+    glad
+    GIT_REPOSITORY https://github.com/Dav1dde/glad.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(glad)
+
+# FreeType
+find_package(Freetype REQUIRED)
+include_directories(${FREETYPE_INCLUDE_DIRS})
+
+# Include-Verzeichnisse
+include_directories(
+    ${CMAKE_SOURCE_DIR}/src
+    ${OPENGL_INCLUDE_DIR}
+    ${GLM_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
 )
 
-# Abhängigkeiten verknüpfen
-target_link_libraries(VR_DAW
-    PRIVATE
-    core
-    plugins
-    ui
-    vr
-    audio
-    video
-    utils
-    juce::juce_audio_basics
-    juce::juce_audio_devices
-    juce::juce_audio_processors
-    juce::juce_audio_utils
-    juce::juce_core
-    juce::juce_data_structures
-    juce::juce_events
-    juce::juce_graphics
-    juce::juce_gui_basics
-    juce::juce_gui_extra
-    OpenXR::openxr_loader
-    glm::glm
+if(USE_JACK)
+    if(JACK_FOUND)
+        include_directories(${JACK_INCLUDE_DIRS})
+        add_definitions(-DUSE_JACK)
+    else()
+        message(WARNING "JACK Audio not found. Audio features will be disabled.")
+    endif()
+endif()
+
+# Quelldateien
+set(SOURCES
+    src/vr/VRUI.cpp
+    src/vr/TextRenderer.cpp
+    src/vr/TextureManager.cpp
 )
 
-if(APPLE)
-    target_link_libraries(VR_DAW
-        PRIVATE
-        ${AUDIOUNIT}
-        ${COREAUDIO}
-    )
+# Header-Dateien
+set(HEADERS
+    src/vr/VRUI.hpp
+    src/vr/TextRenderer.hpp
+    src/vr/TextureManager.hpp
+)
+
+# Shader-Dateien
+set(SHADERS
+    src/vr/shaders/text_vertex.glsl
+    src/vr/shaders/text_fragment.glsl
+)
+
+# Executable erstellen
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${SHADERS})
+
+# Include-Verzeichnisse
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${GLM_INCLUDE_DIRS}
+    ${OPENGL_INCLUDE_DIRS}
+    ${GLEW_INCLUDE_DIRS}
+    ${GLFW3_INCLUDE_DIRS}
+    ${GLAD_INCLUDE_DIRS}
+    ${VULKAN_INCLUDE_DIRS}
+    ${OPENVR_INCLUDE_DIRS}
+    ${PORTAUDIO_INCLUDE_DIRS}
+    ${JACK_INCLUDE_DIRS}
+    ${stb_SOURCE_DIR}
+    ${glad_SOURCE_DIR}/include
+    ${FREETYPE_INCLUDE_DIRS}
+)
+
+# Bibliotheken verlinken
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    ${OPENGL_LIBRARIES}
+    ${GLEW_LIBRARIES}
+    ${GLFW3_LIBRARIES}
+    ${GLAD_LIBRARIES}
+    ${VULKAN_LIBRARIES}
+    ${OPENVR_LIBRARIES}
+    ${PORTAUDIO_LIBRARIES}
+    glad
+    ${FREETYPE_LIBRARIES}
+)
+
+if(USE_JACK AND JACK_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${JACK_LIBRARIES})
 endif()
 
-if(EXISTS "${DOLBY_ATMOS_SDK_DIR}")
-    target_link_libraries(VR_DAW
-        PRIVATE
-        dolby_atmos
-    )
-endif()
+# Compiler-Flags
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    $<$<BOOL:${USE_OPENGL}>:USE_OPENGL>
+    $<$<BOOL:${USE_VULKAN}>:USE_VULKAN>
+    $<$<BOOL:${USE_OPENVR}>:USE_OPENVR>
+)
 
-# Installation konfigurieren
-install(TARGETS VR_DAW
+# Installationsregeln
+install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
 )
 
-# Ressourcen installieren
-install(DIRECTORY resources/
-    DESTINATION share/VR_DAW
-    FILES_MATCHING PATTERN "*.json"
-    PATTERN "*.xml"
-    PATTERN "*.png"
-    PATTERN "*.jpg"
-    PATTERN "*.wav"
-    PATTERN "*.mp3"
-)
-
-# Tests aktivieren
-enable_testing()
-add_subdirectory(tests) 
+# Shader-Dateien installieren
+install(FILES ${SHADERS} DESTINATION share/${PROJECT_NAME}/shaders) 

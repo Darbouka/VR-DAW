@@ -451,4 +451,100 @@ void TextRenderer::createGlyphTexture(Font& font, char32_t character, GlyphInfo&
     }
 }
 
+void TextRenderer::setTextAlignment(TextAlignment alignment) {
+    currentAlignment = alignment;
+}
+
+void TextRenderer::setTextStyle(const TextStyle& style) {
+    currentStyle = style;
+}
+
+void TextRenderer::setTextShadow(const TextShadow& shadow) {
+    currentShadow = shadow;
+}
+
+void TextRenderer::setTextOutline(const TextOutline& outline) {
+    currentOutline = outline;
+}
+
+void TextRenderer::setTextGradient(const TextGradient& gradient) {
+    currentGradient = gradient;
+}
+
+void TextRenderer::setTextAnimation(const TextAnimation& animation) {
+    currentAnimation = animation;
+}
+
+void TextRenderer::preloadGlyphs(const std::string& text) {
+    for (const auto& font : fonts) {
+        for (char c : text) {
+            if (font.second.glyphs.find(c) == font.second.glyphs.end()) {
+                loadGlyph(font.second, c);
+            }
+        }
+    }
+}
+
+void TextRenderer::clearGlyphCache() {
+    for (auto& font : fonts) {
+        for (auto& glyph : font.second.glyphs) {
+            glDeleteTextures(1, &glyph.second.textureID);
+        }
+        font.second.glyphs.clear();
+    }
+}
+
+void TextRenderer::setGlyphCacheSize(size_t size) {
+    glyphCache.maxSize = size;
+}
+
+void TextRenderer::applyTextEffects(const std::string& text, const glm::vec3& position, float scale) {
+    if (currentShadow.enabled) {
+        // Schatten rendern
+        glm::vec3 shadowPos = position + glm::vec3(currentShadow.offset, 0.0f);
+        renderText(text, shadowPos, scale, currentShadow.color);
+    }
+    
+    if (currentOutline.enabled) {
+        // Umriss rendern
+        const float outlineWidth = currentOutline.width * scale;
+        const glm::vec4 outlineColor = currentOutline.color;
+        
+        // Umriss in 8 Richtungen
+        const std::vector<glm::vec2> directions = {
+            {1, 0}, {1, 1}, {0, 1}, {-1, 1},
+            {-1, 0}, {-1, -1}, {0, -1}, {1, -1}
+        };
+        
+        for (const auto& dir : directions) {
+            glm::vec3 outlinePos = position + glm::vec3(dir * outlineWidth, 0.0f);
+            renderText(text, outlinePos, scale, outlineColor);
+        }
+    }
+    
+    if (currentGradient.enabled) {
+        // Farbverlauf berechnen
+        glm::vec4 startColor = currentGradient.startColor;
+        glm::vec4 endColor = currentGradient.endColor;
+        glm::vec2 direction = glm::normalize(currentGradient.direction);
+        
+        // Text mit Farbverlauf rendern
+        for (size_t i = 0; i < text.length(); ++i) {
+            float t = static_cast<float>(i) / (text.length() - 1);
+            glm::vec4 color = glm::mix(startColor, endColor, t);
+            glm::vec3 charPos = position + glm::vec3(i * scale, 0.0f, 0.0f);
+            renderText(std::string(1, text[i]), charPos, scale, color);
+        }
+    } else {
+        // Normalen Text rendern
+        renderText(text, position, scale, glm::vec4(1.0f));
+    }
+}
+
+void TextRenderer::updateTextAnimation(float deltaTime) {
+    if (currentAnimation.enabled && currentAnimation.updateFunction) {
+        currentAnimation.updateFunction(deltaTime);
+    }
+}
+
 } // namespace VR_DAW 
