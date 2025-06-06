@@ -1,0 +1,7 @@
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/VR-DAW.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/edit_cache.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/rebuild_cache.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/list_install_components.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/install.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/install/local.dir
+/Users/fatih/Desktop/StompCoin/VR-DAW/build/CMakeFiles/install/strip.dir

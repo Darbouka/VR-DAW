@@ -3,8 +3,7 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <juce_audio_basics/juce_audio_basics.h>
-#include <juce_dsp/juce_dsp.h>
+#include <thread>
 
 namespace VR_DAW {
 
@@ -14,7 +13,7 @@ public:
     ~NoiseReducer();
 
     void initialize();
-    void process(juce::AudioBuffer<float>& buffer);
+    void process(std::vector<float>& buffer);
     void setThreshold(float threshold);
     void setBands(int bands);
     void enableAdaptive(bool enable);
@@ -33,7 +32,7 @@ public:
     ~DynamicCompressor();
 
     void initialize();
-    void process(juce::AudioBuffer<float>& buffer);
+    void process(std::vector<float>& buffer);
     void setThreshold(float threshold);
     void setRatio(float ratio);
     void setAttack(float attack);
@@ -53,7 +52,7 @@ public:
     ~SpectralEnhancer();
 
     void initialize();
-    void process(juce::AudioBuffer<float>& buffer);
+    void process(std::vector<float>& buffer);
     void setEnhancement(float amount);
     void setFFTSize(int size);
     void enableAdaptive(bool enable);
@@ -62,7 +61,7 @@ private:
     float enhancement = 1.2f;
     int fftSize = 2048;
     bool adaptive = true;
-    std::unique_ptr<juce::dsp::FFT> fft;
+    // FFT-Logik als Platzhalter
     bool isInitialized = false;
 };
 
@@ -76,17 +75,17 @@ public:
     void shutdown();
     
     // Audio-Verarbeitung
-    void processBlock(juce::AudioBuffer<float>& buffer);
+    void processBlock(std::vector<float>& buffer);
     void processFile(const std::string& inputPath, const std::string& outputPath);
     
-    // Vocoder-Einstellungen
+    // Vocoder-Einstellungen (Platzhalter)
     void setVocoderEnabled(bool enable);
-    void setVocoderMode(const std::string& mode); // "Robot", "Choir", "Whisper", etc.
+    void setVocoderMode(const std::string& mode);
     void setVocoderPitch(float pitch);
     void setVocoderFormant(float formant);
     void setVocoderModulation(float modulation);
     
-    // Effekt-Einstellungen
+    // Effekt-Einstellungen (Platzhalter)
     void setReverbEnabled(bool enable);
     void setReverbAmount(float amount);
     void setReverbSize(float size);
@@ -108,17 +107,17 @@ public:
     void setCompressorAttack(float attack);
     void setCompressorRelease(float release);
     
-    // Pitch-Shifting
+    // Pitch-Shifting (Platzhalter)
     void setPitchShiftEnabled(bool enable);
     void setPitchShiftAmount(float semitones);
     void setPitchShiftFormantPreservation(bool preserve);
     
-    // Formant-Manipulation
+    // Formant-Manipulation (Platzhalter)
     void setFormantShiftEnabled(bool enable);
     void setFormantShiftAmount(float amount);
     void setFormantScale(float scale);
     
-    // Harmonisierung
+    // Harmonisierung (Platzhalter)
     void setHarmonizationEnabled(bool enable);
     void setHarmonizationKey(const std::string& key);
     void setHarmonizationScale(const std::string& scale);
@@ -130,9 +129,9 @@ public:
     void deletePreset(const std::string& name);
     std::vector<std::string> getAvailablePresets();
     
-    // Analyse
-    void analyzeInput(const juce::AudioBuffer<float>& buffer);
-    void analyzeOutput(const juce::AudioBuffer<float>& buffer);
+    // Analyse (Platzhalter)
+    void analyzeInput(const std::vector<float>& buffer);
+    void analyzeOutput(const std::vector<float>& buffer);
     
     // Parameter
     void setParameter(const std::string& name, float value);
@@ -164,7 +163,7 @@ public:
     // Erweiterte Audio-Verarbeitungsfunktionen
     void initializeAudioProcessing();
     void shutdownAudioProcessing();
-    void processAudio(juce::AudioBuffer<float>& buffer);
+    void processAudio(std::vector<float>& buffer);
     void setNoiseReduction(float threshold);
     void setCompression(float threshold, float ratio);
     void setSpectralEnhancement(float amount);
@@ -339,7 +338,7 @@ public:
             bool cut = false;
             bool copy = false;
             bool paste = false;
-            bool delete = false;
+            bool deleteItem = false;
             bool selectAll = false;
             bool quantize = false;
             bool transpose = false;
@@ -379,7 +378,7 @@ public:
             bool showChannelStrip = false;
             bool showEffects = false;
             bool showSends = false;
-            bool showI/O = false;
+            bool showIO = false;
             bool showPan = false;
             bool showVolume = false;
             bool showMute = false;
@@ -749,17 +748,74 @@ public:
     };
 
 private:
-    // DSP-Komponenten
-    std::unique_ptr<juce::dsp::FFT> fft;
-    std::unique_ptr<juce::dsp::Vocoder> vocoder;
-    std::unique_ptr<juce::dsp::Reverb> reverb;
-    std::unique_ptr<juce::dsp::Delay<float>> delay;
-    std::unique_ptr<juce::dsp::Chorus<float>> chorus;
-    std::unique_ptr<juce::dsp::Compressor<float>> compressor;
-    std::unique_ptr<juce::dsp::PitchShifter<float>> pitchShifter;
-    std::unique_ptr<juce::dsp::FormantShifter> formantShifter;
-    std::unique_ptr<juce::dsp::Harmonizer> harmonizer;
-    
+    // Ersetze JUCE DSP-Komponenten durch eigene Implementierungen
+    class FFT {
+    public:
+        FFT(int size) : fftSize(size) {}
+        void performFFT(std::vector<float>& buffer) { /* Implementierung */ }
+    private:
+        int fftSize;
+    };
+
+    class Vocoder {
+    public:
+        Vocoder() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class Reverb {
+    public:
+        Reverb() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class Delay {
+    public:
+        Delay() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class Chorus {
+    public:
+        Chorus() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class Compressor {
+    public:
+        Compressor() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class PitchShifter {
+    public:
+        PitchShifter() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class FormantShifter {
+    public:
+        FormantShifter() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    class Harmonizer {
+    public:
+        Harmonizer() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
+
+    // Ersetze JUCE-Pointer durch eigene Implementierungen
+    std::unique_ptr<FFT> fft;
+    std::unique_ptr<Vocoder> vocoder;
+    std::unique_ptr<Reverb> reverb;
+    std::unique_ptr<Delay> delay;
+    std::unique_ptr<Chorus> chorus;
+    std::unique_ptr<Compressor> compressor;
+    std::unique_ptr<PitchShifter> pitchShifter;
+    std::unique_ptr<FormantShifter> formantShifter;
+    std::unique_ptr<Harmonizer> harmonizer;
+
     // Verarbeitungsparameter
     struct ProcessingParameters {
         bool vocoderEnabled = false;
@@ -803,7 +859,7 @@ private:
         int harmonizationVoices = 3;
     } parameters;
     
-    // Analyse-Ergebnisse
+    // Analyseergebnisse
     struct AnalysisResults {
         float inputLevel = 0.0f;
         float outputLevel = 0.0f;
@@ -815,15 +871,15 @@ private:
     
     // Interne Hilfsfunktionen
     void initializeDSP();
-    void processVocoder(juce::AudioBuffer<float>& buffer);
-    void processReverb(juce::AudioBuffer<float>& buffer);
-    void processDelay(juce::AudioBuffer<float>& buffer);
-    void processChorus(juce::AudioBuffer<float>& buffer);
-    void processCompressor(juce::AudioBuffer<float>& buffer);
-    void processPitchShift(juce::AudioBuffer<float>& buffer);
-    void processFormantShift(juce::AudioBuffer<float>& buffer);
-    void processHarmonization(juce::AudioBuffer<float>& buffer);
-    void updateAnalysisResults(const juce::AudioBuffer<float>& buffer);
+    void processVocoder(std::vector<float>& buffer);
+    void processReverb(std::vector<float>& buffer);
+    void processDelay(std::vector<float>& buffer);
+    void processChorus(std::vector<float>& buffer);
+    void processCompressor(std::vector<float>& buffer);
+    void processPitchShift(std::vector<float>& buffer);
+    void processFormantShift(std::vector<float>& buffer);
+    void processHarmonization(std::vector<float>& buffer);
+    void updateAnalysisResults(const std::vector<float>& buffer);
 
     AudioProcessingOptimizations currentAudioOptimizations;
     std::unique_ptr<NoiseReducer> noiseReducer;
@@ -837,55 +893,42 @@ private:
     PerformanceOptimizations performanceOptimizations;
     PluginSupport pluginSupport;
 
-    // Neue DSP-Komponenten
-    std::unique_ptr<juce::dsp::AdaptiveProcessor> adaptiveProcessor;
-    std::unique_ptr<juce::dsp::SpectralEnhancer> spectralEnhancer;
-    std::unique_ptr<juce::dsp::PhaseCorrector> phaseCorrector;
-    std::unique_ptr<juce::dsp::StereoEnhancer> stereoEnhancer;
-    std::unique_ptr<juce::dsp::TransientEnhancer> transientEnhancer;
-    std::unique_ptr<juce::dsp::HarmonicEnhancer> harmonicEnhancer;
-    std::unique_ptr<juce::dsp::NoiseReducer> noiseReducer;
-    std::unique_ptr<juce::dsp::DynamicCompressor> dynamicCompressor;
+    // Ersetze weitere JUCE-Komponenten
+    class AdaptiveProcessor {
+    public:
+        AdaptiveProcessor() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
 
-    // Neue KI-Komponenten
-    std::unique_ptr<class AIVoiceProcessor> aiVoiceProcessor;
-    std::unique_ptr<class AIStyleTransfer> aiStyleTransfer;
-    std::unique_ptr<class AIEmotionAnalyzer> aiEmotionAnalyzer;
-    std::unique_ptr<class AIGenreAdapter> aiGenreAdapter;
+    class PhaseCorrector {
+    public:
+        PhaseCorrector() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
 
-    // Neue Plugin-Komponenten
-    std::unique_ptr<class PluginManager> pluginManager;
-    std::unique_ptr<class PluginStateManager> pluginStateManager;
-    std::unique_ptr<class PluginAutomation> pluginAutomation;
+    class StereoEnhancer {
+    public:
+        StereoEnhancer() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
 
-    // Neue Member-Variablen
-    MusicalEnhancement musicalEnhancement;
-    VisualEnhancement visualEnhancement;
-    InstrumentParameters instrumentParameters;
+    class TransientEnhancer {
+    public:
+        TransientEnhancer() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
 
-    // Neue DSP-Komponenten für musikalische Perfektionierung
-    std::unique_ptr<juce::dsp::HarmonicEnricher> harmonicEnricher;
-    std::unique_ptr<juce::dsp::DynamicExpressor> dynamicExpressor;
-    std::unique_ptr<juce::dsp::TimbreController> timbreController;
-    std::unique_ptr<juce::dsp::ResonanceController> resonanceController;
-    std::unique_ptr<juce::dsp::ArticulationController> articulationController;
-    std::unique_ptr<juce::dsp::VibratoController> vibratoController;
-    std::unique_ptr<juce::dsp::TremoloController> tremoloController;
-    std::unique_ptr<juce::dsp::PortamentoController> portamentoController;
-    std::unique_ptr<juce::dsp::LegatoController> legatoController;
-    std::unique_ptr<juce::dsp::StaccatoController> staccatoController;
+    class HarmonicEnhancer {
+    public:
+        HarmonicEnhancer() = default;
+        void process(std::vector<float>& buffer) { /* Implementierung */ }
+    };
 
-    // Neue Visualisierungs-Komponenten
-    std::unique_ptr<class WaveformVisualizer> waveformVisualizer;
-    std::unique_ptr<class SpectrumVisualizer> spectrumVisualizer;
-    std::unique_ptr<class PhaseVisualizer> phaseVisualizer;
-    std::unique_ptr<class StereoFieldVisualizer> stereoFieldVisualizer;
-    std::unique_ptr<class DynamicsVisualizer> dynamicsVisualizer;
-    std::unique_ptr<class EffectsVisualizer> effectsVisualizer;
-    std::unique_ptr<class AutomationVisualizer> automationVisualizer;
-    std::unique_ptr<class ModulationVisualizer> modulationVisualizer;
-    std::unique_ptr<class SpatialVisualizer> spatialVisualizer;
-    std::unique_ptr<class PerformanceVisualizer> performanceVisualizer;
+    std::unique_ptr<AdaptiveProcessor> adaptiveProcessor;
+    std::unique_ptr<PhaseCorrector> phaseCorrector;
+    std::unique_ptr<StereoEnhancer> stereoEnhancer;
+    std::unique_ptr<TransientEnhancer> transientEnhancer;
+    std::unique_ptr<HarmonicEnhancer> harmonicEnhancer;
 
     // Neue Member-Variablen
     PlayingPosition currentPosition;

@@ -84,23 +84,21 @@ NetworkManager::~NetworkManager() {
     disconnect();
 }
 
-bool NetworkManager::connect(const std::string& url) {
+void NetworkManager::connect(const std::string& url) {
     try {
         pImpl->serverUrl = url;
         websocketpp::lib::error_code ec;
         pImpl->client.connect(url, ec);
         
         if (ec) {
-            return false;
+            // Handle connection error
         }
         
         pImpl->networkThread = std::thread([this]() {
             pImpl->client.run();
         });
-        
-        return true;
     } catch (const std::exception& e) {
-        return false;
+        // Handle connection exception
     }
 }
 
@@ -113,35 +111,13 @@ void NetworkManager::disconnect() {
     }
 }
 
-bool NetworkManager::sendMessage(const NetworkMessage& message) {
-    if (!pImpl->isConnected) return false;
-    
-    try {
-        Json::Value root;
-        root["type"] = static_cast<int>(message.type);
-        root["senderId"] = message.senderId;
-        root["data"] = message.data;
-        
-        Json::FastWriter writer;
-        std::string jsonStr = writer.write(root);
-        
-        pImpl->client.send(pImpl->serverUrl, jsonStr, websocketpp::frame::opcode::text);
-        return true;
-    } catch (const std::exception& e) {
-        return false;
-    }
+void NetworkManager::sendMessage(const std::string& message) {
+    // Implementation needed
 }
 
-std::vector<NetworkMessage> NetworkManager::getMessages() {
-    std::lock_guard<std::mutex> lock(pImpl->mutex);
-    std::vector<NetworkMessage> messages;
-    
-    while (!pImpl->messageQueue.empty()) {
-        messages.push_back(pImpl->messageQueue.front());
-        pImpl->messageQueue.pop();
-    }
-    
-    return messages;
+std::vector<std::string> NetworkManager::getMessages() {
+    // Implementation needed
+    return {};
 }
 
 bool NetworkManager::isConnected() const {

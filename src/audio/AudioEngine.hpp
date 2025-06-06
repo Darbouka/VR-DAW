@@ -7,10 +7,15 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
-#include <juce_audio_basics/juce_audio_basics.h>
-#include <juce_audio_devices/juce_audio_devices.h>
-#include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_dsp/juce_dsp.h>
+#include <map>
+#include <portaudio.h>
+#include <jack/jack.h>
+#include <atomic>
+#include <functional>
+#include <immintrin.h>
+#include "../midi/MIDIEngine.hpp"
+#include "AudioEvent.hpp"
+#include "SynthesizerConfig.hpp"
 
 namespace VR_DAW {
 
@@ -37,7 +42,7 @@ public:
 
     void initialize();
     void shutdown();
-    void processAudioBlock(juce::AudioBuffer<float>& buffer);
+    void processAudioBlock(float* buffer, int numSamples);
     void setBufferSize(int size);
     void setProcessingThreshold(float threshold);
     bool isAvailable() const;
@@ -66,8 +71,79 @@ private:
 
 class AudioEngine {
 public:
+    static AudioEngine& getInstance();
+
+    void initialize();
+    void shutdown();
+    void update();
+
+    // Synthesizer-Management
+    void createSynthesizer(int trackId, const SynthesizerConfig& config);
+    void updateSynthesizer(int trackId, const SynthesizerConfig& config);
+    void deleteSynthesizer(int trackId);
+
+    // Audio-Verarbeitung
+    void processAudio(float* buffer, size_t numFrames);
+    void handleAudioEvent(const AudioEvent& event);
+
+    // Callback-System
+    using AudioCallback = std::function<void(const AudioEvent&)>;
+    void setAudioCallback(AudioCallback callback);
+
+    struct AudioTrack {
+        int id;
+        std::string name;
+        std::vector<float> buffer;
+        float volume;
+        float pan;
+        bool muted;
+        bool soloed;
+        std::vector<std::string> plugins;
+        std::atomic<bool> isProcessing;
+        std::mutex bufferMutex;
+    };
+
+    struct AudioPlugin {
+        int id;
+        std::string name;
+        std::string type;
+        std::map<std::string, float> parameters;
+        std::atomic<bool> isProcessing;
+        std::mutex parameterMutex;
+    };
+
+    struct AudioBuffer {
+        float* data;
+        size_t size;
+        int channels;
+        int sampleRate;
+        std::atomic<bool> isLocked;
+    };
+
     AudioEngine();
     ~AudioEngine();
+
+    void process(float* input, float* output, unsigned long frameCount);
+
+    AudioTrack* createTrack(const std::string& name);
+    void deleteTrack(int trackId);
+    void updateTrack(AudioTrack* track);
+    
+    AudioPlugin* loadPlugin(const std::string& name, const std::string& type);
+    void unloadPlugin(int pluginId);
+    void setPluginParameter(int pluginId, const std::string& paramName, float value);
+    
+    void startPlayback();
+    void stopPlayback();
+    void pausePlayback();
+    void setPlaybackPosition(double position);
+    
+    void setMasterVolume(float volume);
+    void setSampleRate(int rate);
+    void setBufferSize(int size);
+    
+    std::vector<float> getWaveform(int trackId, int channel);
+    void updateWaveform(int trackId, const std::vector<float>& data);
 
     // Audio-Engine-Status
     enum class EngineState {
@@ -112,8 +188,6 @@ public:
     };
 
     // Hauptfunktionen
-    void initialize();
-    void shutdown();
     void start();
     void stop();
     void pause();
@@ -121,21 +195,15 @@ public:
     void record();
 
     // Performance-Optimierung
-    void setBufferSize(int size);
-    void setSampleRate(double rate);
-    void setThreadCount(int count);
-    void enableGPUAcceleration(bool enable);
     void optimizeMemoryUsage();
 
     // Plugin-Management
-    void loadPlugin(const std::string& path);
-    void unloadPlugin(const std::string& pluginId);
     void scanPluginDirectory(const std::string& directory);
     std::vector<PluginInfo> getAvailablePlugins() const;
 
     // Audio-Verarbeitung
-    void processBlock(juce::AudioBuffer<float>& buffer);
-    void processMIDI(const juce::MidiMessage& message);
+    void processBlock(float* buffer, int numSamples);
+    void processMIDI(const std::vector<unsigned char>& message);
     void updateParameters();
 
     // Monitoring
@@ -145,10 +213,6 @@ public:
     // Audio-Stream-Verwaltung
     void startAudioStream();
     void stopAudioStream();
-    
-    // Plugin-Verwaltung
-    void loadPlugin(const std::string& path);
-    void unloadPlugin(const std::string& pluginId);
     
     // Effekt-Verwaltung
     void addEffect(const std::string& effectType);
@@ -164,7 +228,6 @@ public:
     void saveRecording(const std::string& path);
     
     // Mixing & Mastering
-    void setMasterVolume(float volume);
     void setChannelVolume(int channel, float volume);
     void setPan(int channel, float pan);
     
@@ -266,99 +329,75 @@ public:
     // GPU-Beschleunigung
     void initializeGPUAcceleration();
     void shutdownGPUAcceleration();
-    void processAudioWithGPU(juce::AudioBuffer<float>& buffer);
+    void processAudioWithGPU(float* buffer, int numSamples);
     void setGPUProcessingThreshold(float threshold);
     bool isGPUAccelerationAvailable() const;
 
+    // Neue Methoden für optimierte Verarbeitung
+    void processAudioBuffers();
+    void optimizeBufferSize();
+    void setThreadCount(int count);
+    void enableSIMD(bool enable);
+    void setProcessingMode(ProcessingMode mode);
+
+    // MIDI-Integration
+    void setMIDIEngine(std::shared_ptr<MIDIEngine> midiEngine);
+    void processMIDIInput();
+    void handleMIDIMessage(const MIDIEngine::MIDIMessage& message);
+    void startMIDIRecording();
+    void stopMIDIRecording();
+    bool isMIDIRecording() const;
+    std::vector<MIDIEngine::MIDIMessage> getRecordedMIDI() const;
+    void clearMIDIRecording();
+    void setMIDICallback(std::function<void(const MIDIEngine::MIDIMessage&)> callback);
+
 private:
-    // Audio-Engine-Komponenten
-    std::unique_ptr<juce::AudioDeviceManager> deviceManager;
-    std::unique_ptr<juce::AudioProcessorPlayer> processorPlayer;
-    std::vector<std::unique_ptr<juce::AudioProcessor>> plugins;
-    std::unique_ptr<juce::MidiMessageCollector> midiCollector;
+    struct Impl;
+    std::unique_ptr<Impl> pImpl;
+    
+    bool initialized;
+    int sampleRate;
+    int bufferSize;
+    float masterVolume;
+    bool isPlaying;
+    double playbackPosition;
+    
+    std::vector<AudioTrack> tracks;
+    std::vector<AudioPlugin> plugins;
+    
+    PaStream* stream;
+    jack_client_t* jackClient;
 
-    // Performance-Optimierung
-    juce::dsp::ProcessSpec processSpec;
-    std::vector<juce::dsp::ProcessorDuplicator> processorDuplicators;
+    // Neue Member für optimierte Verarbeitung
     std::vector<std::thread> processingThreads;
-    std::atomic<bool> isProcessing;
+    std::queue<AudioBuffer> bufferQueue;
+    std::mutex queueMutex;
+    std::condition_variable queueCondition;
+    std::atomic<bool> shouldProcess;
+    int threadCount;
+    bool simdEnabled;
+    ProcessingMode processingMode;
 
-    // Plugin-Management
-    std::map<std::string, PluginInfo> pluginRegistry;
-    std::vector<std::string> pluginSearchPaths;
-    juce::KnownPluginList knownPluginList;
+    enum class ProcessingMode {
+        RealTime,
+        Offline
+    };
+    
+    void initializePortAudio();
+    void initializeJack();
+    void processAudio(float* input, float* output, unsigned long frameCount);
+    void applyEffects(AudioTrack& track, float* buffer, unsigned long frameCount);
+    void processBuffer(AudioBuffer& buffer);
+    void optimizeProcessing();
+    void initializeThreads();
+    void cleanupThreads();
 
-    // Monitoring
-    PerformanceMetrics currentMetrics;
-    std::function<void(const PerformanceMetrics&)> monitoringCallback;
-    juce::Timer metricsTimer;
+    // MIDI-bezogene Member
+    std::shared_ptr<MIDIEngine> midiEngine;
+    std::atomic<bool> midiRecordingActive;
+    std::vector<MIDIEngine::MIDIMessage> recordedMIDI;
+    std::function<void(const MIDIEngine::MIDIMessage&)> midiCallback;
+    std::mutex midiMutex;
+};
 
-    // Hilfsfunktionen
-    void initializeAudioDevice();
-    void initializePlugins();
-    void optimizeProcessingChain();
-    void updatePerformanceMetrics();
-    void handlePluginScanResults(const juce::KnownPluginList::PluginTree& tree);
-
-    // JUCE Audio-Komponenten
-    std::vector<std::unique_ptr<juce::AudioPluginInstance>> loadedPlugins;
-    
-    // Effekt-Kette
-    std::vector<std::unique_ptr<juce::AudioProcessor>> effects;
-    
-    // Dolby Atmos
-    bool dolbyAtmosEnabled = false;
-    std::unique_ptr<class DolbyAtmosProcessor> atmosProcessor;
-    
-    // Recording
-    std::unique_ptr<juce::AudioFormatWriter> recordingWriter;
-    std::unique_ptr<juce::FileOutputStream> recordingStream;
-    
-    // Sample-Bank
-    std::vector<std::unique_ptr<juce::AudioFormatReader>> sampleBank;
-    
-    // AI-Komponenten
-    std::unique_ptr<class AIMasteringProcessor> aiMastering;
-    std::unique_ptr<class AIMixingProcessor> aiMixing;
-    
-    // Neue Komponenten
-    std::unique_ptr<class SpectralAnalyzer> spectralAnalyzer;
-    std::unique_ptr<class AdaptiveProcessor> adaptiveProcessor;
-    std::unique_ptr<class ThreadPool> pluginThreadPool;
-    std::unique_ptr<class PluginStateManager> pluginStateManager;
-    std::unique_ptr<class AdvancedMixer> advancedMixer;
-    std::unique_ptr<class AdvancedMastering> advancedMastering;
-    std::unique_ptr<class AdvancedRecording> advancedRecording;
-    std::unique_ptr<class AdvancedStreaming> advancedStreaming;
-    std::unique_ptr<class AdvancedAnalysis> advancedAnalysis;
-    std::unique_ptr<class AdvancedProcessing> advancedProcessing;
-    std::unique_ptr<class AdvancedSpatialization> advancedSpatialization;
-    std::unique_ptr<class AdvancedSynthesis> advancedSynthesis;
-    std::unique_ptr<class AdvancedPlayback> advancedPlayback;
-    std::unique_ptr<class AdvancedEffects> advancedEffects;
-    
-    // Zustandsvariablen
-    bool pluginParallelProcessing = false;
-    enum class PluginProcessingMode { Serial, Parallel, Hybrid } pluginProcessingMode = PluginProcessingMode::Serial;
-    bool pluginStateSaving = false;
-
-    // Performance-Optimierungen
-    bool simdEnabled = false;
-    int bufferSize = 512;
-    int threadPoolSize = std::thread::hardware_concurrency();
-    std::unique_ptr<ThreadPool> threadPool;
-    
-    // Audio-Buffering
-    int audioBufferSize = 1024;
-    int audioBufferCount = 3;
-    std::vector<juce::AudioBuffer<float>> audioBuffers;
-    std::atomic<int> currentBufferIndex{0};
-
-    PerformanceOptimizations currentOptimizations;
-    std::unique_ptr<GPUAccelerator> gpuAccelerator;
-    bool gpuAccelerationEnabled = false;
-    float gpuProcessingThreshold = 0.8f;
-    std::unique_ptr<class AdaptiveBuffer> adaptiveBuffer;
-    std::unique_ptr<class PredictiveLoader> predictiveLoader;
-    std::unique_ptr<class MemoryOptimizer> memoryOptimizer;
-}; 
+} // namespace VR_DAW 

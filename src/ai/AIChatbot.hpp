@@ -1,71 +1,58 @@
 #pragma once
 
-#include <memory>
 #include <string>
 #include <vector>
 #include <queue>
+#include <memory>
 #include <mutex>
-#include <condition_variable>
-#include <juce_audio_basics/juce_audio_basics.h>
-#include "../audio/VoiceEditor.hpp"
 
 namespace VR_DAW {
 
+class TextProcessor;
+class NeuralNetwork;
+
 class AIChatbot {
 public:
-    static AIChatbot& getInstance();
-    
-    // Initialisierung und Shutdown
+    AIChatbot();
+    ~AIChatbot();
+
     void initialize();
     void shutdown();
     
-    // Chat-Funktionen
     std::string processInput(const std::string& userInput);
+    void processAudioOutput(std::vector<float>& buffer);
+    
     void setVoiceStyle(const std::string& style);
-    void setLanguage(const std::string& language);
     void setEmotion(const std::string& emotion);
+    void setLanguage(const std::string& language);
     
-    // Audio-Verarbeitung
-    void processAudioOutput(juce::AudioBuffer<float>& buffer);
-    void setVolume(float volume);
-    void setPitch(float pitch);
-    void setSpeechRate(float rate);
+    void enableVoiceEffects(bool enable);
+    void setVoiceEffect(const std::string& effect, float value);
     
-    // Konfiguration
-    void loadModel(const std::string& modelPath);
-    void saveModel(const std::string& modelPath);
-    void trainModel(const std::string& trainingDataPath);
+    void startRecording();
+    void stopRecording();
+    bool isRecording() const;
     
+    void startPlayback();
+    void stopPlayback();
+    bool isPlaying() const;
+
 private:
-    AIChatbot() = default;
-    ~AIChatbot() = default;
+    std::unique_ptr<TextProcessor> textProcessor;
+    std::unique_ptr<NeuralNetwork> model;
+    std::queue<std::vector<float>> audioQueue;
+    std::mutex audioMutex;
     
-    // KI-Modell
-    std::unique_ptr<class NeuralNetwork> model;
-    std::unique_ptr<class TextProcessor> textProcessor;
-    std::unique_ptr<class VoiceSynthesizer> voiceSynthesizer;
+    bool recording = false;
+    bool playing = false;
+    std::string currentVoiceStyle;
+    std::string currentEmotion;
+    std::string currentLanguage;
+    bool voiceEffectsEnabled = true;
     
-    // Audio-Verarbeitung
-    std::unique_ptr<VoiceEditor> voiceEditor;
-    std::queue<juce::AudioBuffer<float>> audioQueue;
-    std::mutex queueMutex;
-    std::condition_variable queueCondition;
-    
-    // Parameter
-    struct Parameters {
-        std::string voiceStyle = "Neutral";
-        std::string language = "Deutsch";
-        std::string emotion = "Neutral";
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        float speechRate = 1.0f;
-    } parameters;
-    
-    // Interne Hilfsfunktionen
-    void initializeDSP();
-    void processTextToSpeech(const std::string& text);
-    void synthesizeVoice(const std::string& text);
-    void applyVoiceEffects(juce::AudioBuffer<float>& buffer);
+    void applyVoiceEffects(std::vector<float>& buffer);
+    void processAudioQueue();
+    void updateVoiceParameters();
 };
 
 } // namespace VR_DAW 

@@ -42,6 +42,8 @@ endif()
 
 # JACK optional finden
 if(USE_JACK)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JACK REQUIRED jack)
     add_definitions(-DUSE_JACK)
 endif()
 
@@ -126,7 +128,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${GLM_INCLUDE_DIRS}
     ${OPENGL_INCLUDE_DIRS}
-    ${GLEW_INCLUDE_DIRS}
+    ${GLEW_INCLUDE_DIR}
     ${GLFW3_INCLUDE_DIRS}
     ${GLAD_INCLUDE_DIRS}
     ${VULKAN_INCLUDE_DIRS}
@@ -144,7 +146,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # Bibliotheken verlinken
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OPENGL_LIBRARIES}
-    ${GLEW_LIBRARIES}
+    ${GLEW_LIBRARY}
     ${GLFW3_LIBRARIES}
     ${GLAD_LIBRARIES}
     ${VULKAN_LIBRARIES}
@@ -159,6 +161,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 if(USE_JACK)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${JACK_LIBRARY})
+endif()
+
+if(USE_OPENGL)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${GLEW_INCLUDE_DIR})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${GLEW_LIBRARY})
 endif()
 
 # Compiler-Flags

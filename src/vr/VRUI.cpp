@@ -90,6 +90,7 @@ bool VRUI::initialize() {
         initializeFontSystem();
         initializeAudioSystem();
         initializeRenderingSystem();
+        initializeWebRTCSystem();  // WebRTC-System initialisieren
         
         initialized = true;
         pImpl->hasError = false;
@@ -102,6 +103,8 @@ bool VRUI::initialize() {
 
 void VRUI::shutdown() {
     if (!initialized) return;
+
+    shutdownWebRTC();  // WebRTC-System herunterfahren
 
     pImpl->elements.clear();
     pImpl->trackViews.clear();
@@ -165,6 +168,12 @@ void VRUI::render() {
         // Synthesizer-Views rendern
         for (const auto& view : pImpl->synthesizerViews) {
             renderSynthesizerView(view);
+            pImpl->metrics.drawCalls++;
+        }
+
+        // WebRTC-Views rendern
+        for (const auto& view : pImpl->webRTCViews) {
+            renderWebRTCView(view);
             pImpl->metrics.drawCalls++;
         }
 
@@ -1341,6 +1350,13 @@ void VRUI::initializeAudioSystem() {
         if (jack_activate(pImpl->jackClient) != 0) {
             throw std::runtime_error("JACK-Client konnte nicht aktiviert werden");
         }
+
+        // WebRTC-Audio-Integration
+        if (webRTCManager) {
+            webRTCManager->setAudioCallback([this](const WebRTCManager::AudioEvent& event) {
+                handleWebRTCEvent(event);
+            });
+        }
     } catch (const std::exception& e) {
         logError("Audio-System-Initialisierungsfehler: " + std::string(e.what()));
         throw;
@@ -1361,6 +1377,18 @@ int VRUI::processAudio(jack_nframes_t nframes, void* arg) {
         // Audio-Engine verarbeiten
         auto& engine = AudioEngine::getInstance();
         engine.processAudio(input, output, nframes);
+        
+        // WebRTC-Audio-Daten verarbeiten
+        if (ui->webRTCManager) {
+            // Audio-Daten an WebRTC weiterleiten
+            WebRTCManager::AudioEvent event;
+            event.audioData = output;
+            event.numFrames = nframes;
+            event.numChannels = 2; // Stereo
+            event.sampleRate = jack_get_sample_rate(ui->pImpl->jackClient);
+            
+            ui->webRTCManager->processAudioData(event);
+        }
         
         // UI-Elemente aktualisieren
         ui->updateAudioVisualization(output, nframes);
@@ -1524,6 +1552,458 @@ void VRUI::clearErrors() {
     pImpl->lastError.clear();
     pImpl->hasError = false;
     pImpl->errorLog.clear();
+}
+
+void VRUI::initializeWebRTC() {
+    if (!initialized) {
+        logError("VRUI ist nicht initialisiert");
+        return;
+    }
+
+    try {
+        webRTCManager = std::make_unique<WebRTCManager>();
+        if (!webRTCManager->initialize()) {
+            throw std::runtime_error("WebRTC-Manager konnte nicht initialisiert werden");
+        }
+
+        // WebRTC-Callbacks registrieren
+        webRTCManager->setOnTrackCallback([this](const WebRTCManager::AudioEvent& event) {
+            handleWebRTCEvent(event);
+        });
+
+        webRTCManager->setOnConnectionStateChangeCallback([this](const std::string& peerId, WebRTCManager::ConnectionState state) {
+            // Verbindungsstatus-Änderungen verarbeiten
+            switch (state) {
+                case WebRTCManager::ConnectionState::Connected:
+                    // Verbindung hergestellt - UI aktualisieren
+                    break;
+                case WebRTCManager::ConnectionState::Disconnected:
+                    // Verbindung getrennt - UI aktualisieren
+                    break;
+                case WebRTCManager::ConnectionState::Failed:
+                    // Verbindungsfehler - UI aktualisieren
+                    logError("WebRTC-Verbindungsfehler mit Peer: " + peerId);
+                    break;
+            }
+        });
+
+    } catch (const std::exception& e) {
+        logError("WebRTC-Initialisierungsfehler: " + std::string(e.what()));
+    }
+}
+
+void VRUI::shutdownWebRTC() {
+    if (webRTCManager) {
+        webRTCManager->shutdown();
+        webRTCManager.reset();
+    }
+}
+
+bool VRUI::createPeerConnection(const std::string& peerId) {
+    if (!webRTCManager) {
+        logError("WebRTC-Manager ist nicht initialisiert");
+        return false;
+    }
+
+    try {
+        return webRTCManager->createPeerConnection(peerId);
+    } catch (const std::exception& e) {
+        logError("Fehler beim Erstellen der Peer-Verbindung: " + std::string(e.what()));
+        return false;
+    }
+}
+
+bool VRUI::addAudioTrack(const std::string& peerId) {
+    if (!webRTCManager) {
+        logError("WebRTC-Manager ist nicht initialisiert");
+        return false;
+    }
+
+    try {
+        return webRTCManager->addAudioTrack(peerId);
+    } catch (const std::exception& e) {
+        logError("Fehler beim Hinzufügen des Audio-Tracks: " + std::string(e.what()));
+        return false;
+    }
+}
+
+bool VRUI::removeAudioTrack(const std::string& peerId) {
+    if (!webRTCManager) {
+        logError("WebRTC-Manager ist nicht initialisiert");
+        return false;
+    }
+
+    try {
+        return webRTCManager->removeAudioTrack(peerId);
+    } catch (const std::exception& e) {
+        logError("Fehler beim Entfernen des Audio-Tracks: " + std::string(e.what()));
+        return false;
+    }
+}
+
+void VRUI::handleWebRTCEvent(const WebRTCManager::AudioEvent& event) {
+    // Validierung der Audio-Daten
+    if (!event.audioData) {
+        logError("Ungültige Audio-Daten: Null-Pointer");
+        return;
+    }
+
+    if (event.numFrames == 0) {
+        logError("Ungültige Audio-Daten: Keine Frames");
+        return;
+    }
+
+    if (event.numChannels == 0 || event.numChannels > 8) {
+        logError("Ungültige Audio-Daten: Ungültige Kanalanzahl");
+        return;
+    }
+
+    if (event.sampleRate == 0 || event.sampleRate > 192000) {
+        logError("Ungültige Audio-Daten: Ungültige Sample-Rate");
+        return;
+    }
+
+    if (event.peerId.empty()) {
+        logError("Ungültige Audio-Daten: Keine Peer-ID");
+        return;
+    }
+
+    // Audio-Daten verarbeiten
+    if (pImpl->audioEngine) {
+        try {
+            // Audio-Level berechnen
+            float audioLevel = 0.0f;
+            for (size_t i = 0; i < event.numFrames * event.numChannels; ++i) {
+                audioLevel = std::max(audioLevel, std::abs(event.audioData[i]));
+            }
+
+            // Audio-Level in dB umrechnen
+            float audioLevelDB = 20.0f * std::log10(audioLevel + 1e-10f);
+
+            // WebRTC-View aktualisieren
+            for (auto& view : pImpl->webRTCViews) {
+                if (view.peerId == event.peerId) {
+                    updateAudioMeter(&view, audioLevelDB);
+                    break;
+                }
+            }
+
+            // Audio-Daten an die Audio-Engine weiterleiten
+            pImpl->audioEngine->processAudioData(
+                event.audioData,
+                event.numFrames,
+                event.numChannels,
+                event.sampleRate
+            );
+        } catch (const std::exception& e) {
+            logError("Fehler bei der Audio-Verarbeitung: " + std::string(e.what()));
+        }
+    }
+}
+
+void VRUI::setWebRTCCallback(std::function<void(const WebRTCManager::AudioEvent&)> callback) {
+    webRTCCallback = callback;
+}
+
+void VRUI::initializeWebRTCSystem() {
+    if (!checkSystemRequirements()) {
+        logError("System erfüllt nicht die Mindestanforderungen für WebRTC");
+        return;
+    }
+
+    if (!pImpl->webRTCManager) {
+        pImpl->webRTCManager = std::make_unique<WebRTCManager>();
+    }
+
+    try {
+        if (!pImpl->webRTCManager->initialize()) {
+            throw std::runtime_error("WebRTC-System konnte nicht initialisiert werden");
+        }
+
+        // WebRTC-Callbacks registrieren
+        pImpl->webRTCManager->setOnTrackCallback(
+            [this](const WebRTCManager::AudioEvent& event) {
+                handleWebRTCEvent(event);
+            }
+        );
+
+        pImpl->webRTCManager->setOnConnectionStateChangeCallback(
+            [this](const std::string& peerId, WebRTCManager::ConnectionState state) {
+                for (auto& view : pImpl->webRTCViews) {
+                    if (view.peerId == peerId) {
+                        updateConnectionStatus(&view, state);
+                        break;
+                    }
+                }
+            }
+        );
+
+        // Audio-Verarbeitung konfigurieren
+        WebRTCManager::AudioProcessingConfig config;
+        config.noiseSuppression = true;
+        config.echoCancellation = true;
+        config.automaticGainControl = true;
+        config.gainControlLevel = 1.0f;
+        config.sampleRate = 48000;
+        config.numChannels = 2;
+
+        pImpl->webRTCManager->setAudioProcessingConfig(config);
+        pImpl->webRTCManager->setAudioProcessingEnabled(true);
+    } catch (const std::exception& e) {
+        logError("WebRTC-Initialisierungsfehler: " + std::string(e.what()));
+    }
+}
+
+bool VRUI::checkSystemRequirements() {
+    // Überprüfe Systemanforderungen
+    bool requirementsMet = true;
+    std::string errorMessage;
+
+    // Überprüfe Audio-Geräte
+    if (!checkAudioDevices()) {
+        requirementsMet = false;
+        errorMessage += "Keine Audio-Geräte gefunden\n";
+    }
+
+    // Überprüfe Netzwerk-Verbindung
+    if (!checkNetworkConnection()) {
+        requirementsMet = false;
+        errorMessage += "Keine Netzwerk-Verbindung\n";
+    }
+
+    // Überprüfe System-Ressourcen
+    if (!checkSystemResources()) {
+        requirementsMet = false;
+        errorMessage += "Unzureichende System-Ressourcen\n";
+    }
+
+    if (!requirementsMet) {
+        logError("Systemanforderungen nicht erfüllt:\n" + errorMessage);
+    }
+
+    return requirementsMet;
+}
+
+bool VRUI::checkAudioDevices() {
+    // Implementierung der Audio-Geräte-Überprüfung
+    return true; // TODO: Implementieren
+}
+
+bool VRUI::checkNetworkConnection() {
+    // Implementierung der Netzwerk-Verbindungsüberprüfung
+    return true; // TODO: Implementieren
+}
+
+bool VRUI::checkSystemResources() {
+    // Implementierung der System-Ressourcen-Überprüfung
+    return true; // TODO: Implementieren
+}
+
+VRUI::WebRTCView* VRUI::createWebRTCView(const std::string& peerId) {
+    WebRTCView view;
+    view.peerId = peerId;
+    view.position = glm::vec3(0.0f);
+    view.size = glm::vec3(0.8f, 0.4f, 0.1f);
+    view.isConnected = false;
+    view.audioLevel = 0.0f;
+    view.connectionState = WebRTCManager::ConnectionState::Disconnected;
+
+    // UI-Elemente erstellen
+    createWebRTCControls(view);
+    createStatusIndicators(view);
+    createAudioMeters(view);
+
+    pImpl->webRTCViews.push_back(view);
+    return &pImpl->webRTCViews.back();
+}
+
+void VRUI::updateWebRTCView(WebRTCView* view) {
+    if (!view) return;
+
+    updateWebRTCControls(*view);
+    updateStatusIndicators(*view);
+    updateAudioMeters(*view);
+}
+
+void VRUI::deleteWebRTCView(WebRTCView* view) {
+    if (!view) return;
+
+    // UI-Elemente entfernen
+    pImpl->elements.erase(
+        std::remove_if(pImpl->elements.begin(), pImpl->elements.end(),
+            [view](const UIElement& e) {
+                return e.id.find(view->peerId) != std::string::npos;
+            }),
+        pImpl->elements.end()
+    );
+
+    // WebRTC-View entfernen
+    pImpl->webRTCViews.erase(
+        std::remove_if(pImpl->webRTCViews.begin(), pImpl->webRTCViews.end(),
+            [view](const WebRTCView& v) { return v.peerId == view->peerId; }),
+        pImpl->webRTCViews.end()
+    );
+}
+
+void VRUI::arrangeWebRTCViews() {
+    float spacing = 1.0f;
+    float startX = -1.5f;
+
+    for (size_t i = 0; i < pImpl->webRTCViews.size(); ++i) {
+        auto& view = pImpl->webRTCViews[i];
+        view.position = glm::vec3(startX + i * spacing, 0.0f, 0.0f);
+        
+        // UI-Elemente neu positionieren
+        for (auto& control : view.controls) {
+            updateElementTransform(control);
+        }
+        for (auto& indicator : view.statusIndicators) {
+            updateElementTransform(indicator);
+        }
+        for (auto& meter : view.audioMeters) {
+            updateElementTransform(meter);
+        }
+    }
+}
+
+void VRUI::renderWebRTCView(const WebRTCView& view) {
+    // WebRTC-View-Hintergrund rendern
+    glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), view.position);
+    modelMatrix = glm::scale(modelMatrix, view.size);
+    
+    // Peer-ID rendern
+    auto* peerIdText = createText(view.peerId, view.position + glm::vec3(0.0f, 0.15f, 0.0f), 0.05f);
+    renderText(*peerIdText);
+
+    // UI-Elemente rendern
+    renderWebRTCControls(view);
+    renderStatusIndicators(view);
+    renderAudioMeters(view);
+}
+
+void VRUI::updateAudioMeter(WebRTCView* view, float level) {
+    if (!view) return;
+    view->audioLevel = level;
+    updateAudioMeters(*view);
+}
+
+void VRUI::updateConnectionStatus(WebRTCView* view, WebRTCManager::ConnectionState state) {
+    if (!view) return;
+    view->connectionState = state;
+    view->isConnected = (state == WebRTCManager::ConnectionState::Connected);
+    updateStatusIndicators(*view);
+}
+
+void VRUI::createWebRTCControls(WebRTCView& view) {
+    // Verbindungs-Button
+    auto* connectButton = createButton("connect_" + view.peerId,
+                                     view.position + glm::vec3(-0.3f, 0.0f, 0.0f),
+                                     glm::vec3(0.15f, 0.05f, 0.05f));
+    connectButton->text = "Verbinden";
+    connectButton->onClick = [this, &view]() {
+        if (!view.isConnected) {
+            createPeerConnection(view.peerId);
+        }
+    };
+    view.controls.push_back(*connectButton);
+
+    // Audio-Track-Button
+    auto* audioButton = createButton("audio_" + view.peerId,
+                                   view.position + glm::vec3(-0.1f, 0.0f, 0.0f),
+                                   glm::vec3(0.15f, 0.05f, 0.05f));
+    audioButton->text = "Audio";
+    audioButton->onClick = [this, &view]() {
+        if (view.isConnected) {
+            addAudioTrack(view.peerId);
+        }
+    };
+    view.controls.push_back(*audioButton);
+
+    // Trennen-Button
+    auto* disconnectButton = createButton("disconnect_" + view.peerId,
+                                        view.position + glm::vec3(0.1f, 0.0f, 0.0f),
+                                        glm::vec3(0.15f, 0.05f, 0.05f));
+    disconnectButton->text = "Trennen";
+    disconnectButton->onClick = [this, &view]() {
+        if (view.isConnected) {
+            removeAudioTrack(view.peerId);
+        }
+    };
+    view.controls.push_back(*disconnectButton);
+}
+
+void VRUI::createStatusIndicators(WebRTCView& view) {
+    // Verbindungsstatus-Indikator
+    auto* statusIndicator = createButton("status_" + view.peerId,
+                                       view.position + glm::vec3(0.3f, 0.0f, 0.0f),
+                                       glm::vec3(0.05f));
+    statusIndicator->text = "●";
+    view.statusIndicators.push_back(*statusIndicator);
+}
+
+void VRUI::createAudioMeters(WebRTCView& view) {
+    // Audio-Level-Meter
+    auto* audioMeter = createSlider("meter_" + view.peerId,
+                                  view.position + glm::vec3(0.0f, -0.1f, 0.0f),
+                                  glm::vec3(0.3f, 0.02f, 0.02f));
+    audioMeter->value = 0.0f;
+    view.audioMeters.push_back(*audioMeter);
+}
+
+void VRUI::updateWebRTCControls(WebRTCView& view) {
+    for (auto& control : view.controls) {
+        if (control.id.find("connect") != std::string::npos) {
+            control.text = view.isConnected ? "Verbunden" : "Verbinden";
+        } else if (control.id.find("audio") != std::string::npos) {
+            control.interactive = view.isConnected;
+        } else if (control.id.find("disconnect") != std::string::npos) {
+            control.interactive = view.isConnected;
+        }
+    }
+}
+
+void VRUI::updateStatusIndicators(WebRTCView& view) {
+    for (auto& indicator : view.statusIndicators) {
+        if (indicator.id.find("status") != std::string::npos) {
+            switch (view.connectionState) {
+                case WebRTCManager::ConnectionState::Connected:
+                    indicator.text = "●";
+                    break;
+                case WebRTCManager::ConnectionState::Disconnected:
+                    indicator.text = "○";
+                    break;
+                case WebRTCManager::ConnectionState::Failed:
+                    indicator.text = "×";
+                    break;
+            }
+        }
+    }
+}
+
+void VRUI::updateAudioMeters(WebRTCView& view) {
+    for (auto& meter : view.audioMeters) {
+        if (meter.id.find("meter") != std::string::npos) {
+            meter.value = view.audioLevel;
+        }
+    }
+}
+
+void VRUI::renderWebRTCControls(const WebRTCView& view) {
+    for (const auto& control : view.controls) {
+        renderElement(control);
+    }
+}
+
+void VRUI::renderStatusIndicators(const WebRTCView& view) {
+    for (const auto& indicator : view.statusIndicators) {
+        renderElement(indicator);
+    }
+}
+
+void VRUI::renderAudioMeters(const WebRTCView& view) {
+    for (const auto& meter : view.audioMeters) {
+        renderElement(meter);
+    }
 }
 
 } // namespace VR_DAW 

@@ -10,10 +10,12 @@
 #include "audio/AudioEvent.hpp"
 #include "audio/SynthesizerConfig.hpp"
 #include "audio/AudioEngine.hpp"
+#include "network/WebRTCManager.hpp"
 
-// JACK-Audio-System optional machen
 #ifdef USE_JACK
 #include <jack/jack.h>
+#include <jack/types.h>
+#include <jack/ringbuffer.h>
 #endif
 
 namespace VR_DAW {
@@ -58,12 +60,18 @@ public:
     };
 
     struct TextElement {
+        enum class Alignment {
+            Left,
+            Center,
+            Right
+        };
         std::string text;
         glm::vec3 position;
         glm::vec3 scale;
         glm::vec4 color;
         float fontSize;
         std::string fontName;
+        Alignment alignment;
     };
 
     struct Animation {
@@ -107,6 +115,49 @@ public:
         static bool validateValue(const std::string& paramName, float value);
         static float normalizeValue(const std::string& paramName, float value);
         static float denormalizeValue(const std::string& paramName, float normalizedValue);
+    };
+
+    struct AudioEvent {
+        enum class Type {
+            NoteOn,
+            NoteOff,
+            ControlChange,
+            PitchBend,
+            AudioData
+        };
+        Type type;
+        int channel;
+        int value1;
+        int value2;
+        const float* audioData;
+        size_t numFrames;
+        size_t numChannels;
+        uint32_t sampleRate;
+    };
+
+    struct MIDIMessage {
+        enum class Type {
+            NoteOn,
+            NoteOff,
+            ControlChange,
+            PitchBend
+        };
+        Type type;
+        int channel;
+        int value1;
+        int value2;
+    };
+
+    struct WebRTCView {
+        std::string peerId;
+        glm::vec3 position;
+        glm::vec3 size;
+        std::vector<UIElement> controls;
+        std::vector<UIElement> statusIndicators;
+        std::vector<UIElement> audioMeters;
+        bool isConnected;
+        float audioLevel;
+        WebRTCManager::ConnectionState connectionState;
     };
 
     VRUI();
@@ -201,6 +252,26 @@ public:
     void updateAudioVisualization(const float* audioData, size_t numFrames);
     void handleAudioEvent(const AudioEvent& event);
 
+    // WebRTC-Integration
+    void initializeWebRTC();
+    void shutdownWebRTC();
+    bool createPeerConnection(const std::string& peerId);
+    bool addAudioTrack(const std::string& peerId);
+    bool removeAudioTrack(const std::string& peerId);
+    void handleWebRTCEvent(const WebRTCManager::AudioEvent& event);
+
+    // Callbacks
+    void setWebRTCCallback(std::function<void(const WebRTCManager::AudioEvent&)> callback);
+
+    // WebRTC-UI-Methoden
+    WebRTCView* createWebRTCView(const std::string& peerId);
+    void updateWebRTCView(WebRTCView* view);
+    void deleteWebRTCView(WebRTCView* view);
+    void arrangeWebRTCViews();
+    void renderWebRTCView(const WebRTCView& view);
+    void updateAudioMeter(WebRTCView* view, float level);
+    void updateConnectionStatus(WebRTCView* view, WebRTCManager::ConnectionState state);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> pImpl;
@@ -208,12 +279,20 @@ private:
     bool debugEnabled;
     float renderScale;
     int renderQuality;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastUpdateTime;
 
 #ifdef USE_JACK
     jack_client_t* jackClient;
     jack_port_t* inputPort;
     jack_port_t* outputPort;
+    jack_ringbuffer_t* audioBuffer;
+    void initializeJACK();
+    void shutdownJACK();
 #endif
+
+    // WebRTC-Komponenten
+    std::unique_ptr<WebRTCManager> webRTCManager;
+    std::function<void(const WebRTCManager::AudioEvent&)> webRTCCallback;
 
     // Synthesizer-spezifische private Methoden
     void createOscillatorControls(SynthesizerView& view, const SynthesizerConfig::OscillatorConfig& config, int index);
@@ -231,12 +310,26 @@ private:
     void initializeEasingFunctions();
     void initializeAudioSystem();
     void initializeRenderingSystem();
+    void initializeWebRTCSystem();
     void logError(const std::string& error);
     void renderElementBounds(const UIElement& element);
 
     // Audio-System-Initialisierung
     void initializeAudioSystem();
     void initializeRenderingSystem();
+
+    std::vector<WebRTCView> webRTCViews;
+    
+    // WebRTC-UI-Hilfsmethoden
+    void createWebRTCControls(WebRTCView& view);
+    void createStatusIndicators(WebRTCView& view);
+    void createAudioMeters(WebRTCView& view);
+    void updateWebRTCControls(WebRTCView& view);
+    void updateStatusIndicators(WebRTCView& view);
+    void updateAudioMeters(WebRTCView& view);
+    void renderWebRTCControls(const WebRTCView& view);
+    void renderStatusIndicators(const WebRTCView& view);
+    void renderAudioMeters(const WebRTCView& view);
 };
 
 } // namespace VR_DAW 

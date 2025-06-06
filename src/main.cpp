@@ -1,146 +1,69 @@
-#include <JuceHeader.h>
+#include "vr/VRUI.hpp"
 #include "audio/AudioEngine.hpp"
-#include "vr/VRInterface.hpp"
-#include "ui/VRUI.hpp"
-#include "video/VideoEngine.hpp"
-#include "utils/Logger.hpp"
-#include "utils/Config.hpp"
+#include "plugins/PluginInterface.hpp"
+#include "plugins/plugins/ReverbPlugin.hpp"
+#include <iostream>
+#include <memory>
+#include <thread>
+#include <chrono>
 
-class VRDAWApplication : public juce::JUCEApplication
-{
-public:
-    VRDAWApplication() = default;
+using namespace VR_DAW;
 
-    const juce::String getApplicationName() override { return "VR-DAW"; }
-    const juce::String getApplicationVersion() override { return "1.0.0"; }
-    bool moreThanOneInstanceAllowed() override { return false; }
-
-    void initialise(const juce::String& commandLine) override
-    {
-        try
-        {
-            // Initialisiere Logger
-            Logger::getInstance().initialize("vrdaw.log");
-            Logger::getInstance().log(LogLevel::Info, "VR-DAW wird gestartet...");
-
-            // Lade Konfiguration
-            Config::getInstance().load("config.json");
-
-            // Initialisiere Audio Engine
-            if (!AudioEngine::getInstance().initialize())
-            {
-                throw std::runtime_error("Fehler bei der Initialisierung der Audio Engine");
-            }
-
-            // Initialisiere VR Interface
-            if (!VRInterface::getInstance().initialize())
-            {
-                throw std::runtime_error("Fehler bei der Initialisierung des VR Interface");
-            }
-
-            // Initialisiere Video Engine
-            if (!VideoEngine::getInstance().initialize())
-            {
-                throw std::runtime_error("Fehler bei der Initialisierung der Video Engine");
-            }
-
-            // Erstelle Hauptfenster
-            mainWindow = std::make_unique<MainWindow>(getApplicationName());
-            
-            // Desktop-Modus konfigurieren
-            auto& vrInterface = VRInterface::getInstance();
-            vrInterface.setOperationMode(VRInterface::OperationMode::Desktop);
-            vrInterface.setDesktopViewport(1280, 720);
-            vrInterface.setDesktopCamera(
-                glm::vec3(0.0f, 1.6f, 2.0f),  // Standard-Kameraposition
-                glm::quat(1.0f, 0.0f, 0.0f, 0.0f)  // Keine Rotation
-            );
-            vrInterface.setDesktopScale(1.0f);
-        }
-        catch (const std::exception& e)
-        {
-            Logger::getInstance().log(LogLevel::Error, "Fehler beim Start: " + std::string(e.what()));
-            quit();
-        }
-    }
-
-    void shutdown() override
-    {
-        try
-        {
-            // Speichere Konfiguration
-            Config::getInstance().save();
-
-            // Beende Video Engine
-            VideoEngine::getInstance().shutdown();
-
-            // Beende VR Interface
-            VRInterface::getInstance().shutdown();
-
-            // Beende Audio Engine
-            AudioEngine::getInstance().shutdown();
-
-            // Beende Logger
-            Logger::getInstance().shutdown();
-
-            mainWindow = nullptr;
-        }
-        catch (const std::exception& e)
-        {
-            juce::Logger::writeToLog("Fehler beim Beenden: " + std::string(e.what()));
-        }
-    }
-
-    void systemRequestedQuit() override
-    {
-        quit();
-    }
-
-    void anotherInstanceStarted(const juce::String& commandLine) override
-    {
-        // Ignoriere weitere Instanzen
-    }
-
-    class MainWindow : public juce::DocumentWindow
-    {
-    public:
-        MainWindow(juce::String name)
-            : DocumentWindow(name,
-                juce::Desktop::getInstance().getDefaultLookAndFeel()
-                .findColour(juce::ResizableWindow::backgroundColourId),
-                DocumentWindow::allButtons)
-        {
-            setUsingNativeTitleBar(true);
-            setContentOwned(new VRUI(), true);
-            setResizable(true, true);
-            centreWithSize(getWidth(), getHeight());
-            setVisible(true);
-            
-            // Fenstergrößenänderung-Handler
-            addComponentListener(this);
+int main() {
+    try {
+        // Audio-Engine initialisieren
+        AudioEngine audioEngine;
+        if (!audioEngine.initialize()) {
+            std::cerr << "Fehler bei der Audio-Engine-Initialisierung" << std::endl;
+            return 1;
         }
 
-        void closeButtonPressed() override
-        {
-            JUCEApplication::getInstance()->systemRequestedQuit();
+        // VR-UI initialisieren
+        VRUI vrUI;
+        if (!vrUI.initialize()) {
+            std::cerr << "Fehler bei der VR-UI-Initialisierung" << std::endl;
+            return 1;
         }
+
+        // Reverb-Plugin registrieren
+        auto reverbFactory = std::make_unique<ReverbPluginFactory>();
+        PluginManager::getInstance().registerPluginFactory(std::move(reverbFactory));
+
+        // Beispiel-Track erstellen
+        auto* track = audioEngine.createTrack("Hauptspur");
+        auto* reverbPlugin = audioEngine.loadPlugin("Reverb", "Reverb");
         
-        void componentMovedOrResized(bool wasMoved, bool wasResized) override
-        {
-            if (wasResized)
-            {
-                // Desktop-Viewport aktualisieren
-                auto& vrInterface = VRInterface::getInstance();
-                vrInterface.setDesktopViewport(getWidth(), getHeight());
-            }
+        if (reverbPlugin) {
+            reverbPlugin->setParameter("Room Size", 0.7f);
+            reverbPlugin->setParameter("Wet Level", 0.3f);
         }
 
-    private:
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
-    };
+        // Hauptschleife
+        bool running = true;
+        while (running) {
+            // VR-UI aktualisieren
+            vrUI.update();
 
-private:
-    std::unique_ptr<MainWindow> mainWindow;
-};
+            // Audio verarbeiten
+            float inputBuffer[1024] = {0};
+            float outputBuffer[1024] = {0};
+            audioEngine.process(inputBuffer, outputBuffer, 1024);
 
-START_JUCE_APPLICATION(VRDAWApplication) 
+            // VR-UI rendern
+            vrUI.render();
+
+            // Kurze Pause
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        }
+
+        // Aufräumen
+        audioEngine.shutdown();
+        vrUI.shutdown();
+
+        return 0;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Fehler: " << e.what() << std::endl;
+        return 1;
+    }
+} 
